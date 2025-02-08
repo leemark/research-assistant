@@ -138,12 +138,12 @@ def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
     - Consider new technologies and contrarian ideas, and clearly flag any high levels of speculation.
 
     --------------------------------------------------
-    Overall Executive Summary:
+    Executive Summary:
     - Provide one combined executive summary for the entire research report using 3-5 bullet points. 
     - Ensure the summary captures the most critical findings and recommendations across all sources.
     --------------------------------------------------
 
-    Following the Overall Executive Summary, provide a detailed analysis that includes:
+    Following the Executive Summary, provide a detailed analysis that includes:
     1. A robust breakdown of evidence with source citations.
     2. Identification of conflicting perspectives or gaps in the research.
     3. Proactive recommendations for further investigation.
@@ -225,6 +225,27 @@ def simplify_search_query(refined_query: str) -> List[str]:
     search_queries = [q.strip() for q in response.text.strip().split('\n') if q.strip()]
     return search_queries[:5]  # Ensure we return exactly 5 queries
 
+def to_headline_case(text: str) -> str:
+    """Convert text to headline case, properly handling articles, conjunctions, and prepositions."""
+    # Words that should not be capitalized (unless they're the first word)
+    minor_words = {'a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'in', 'of', 'on', 'or', 'the', 'to', 'with'}
+    
+    words = text.split()
+    if not words:
+        return text
+        
+    # Capitalize the first word regardless of what it is
+    result = [words[0].capitalize()]
+    
+    # Process the rest of the words
+    for word in words[1:]:
+        if word.lower() in minor_words:
+            result.append(word.lower())
+        else:
+            result.append(word.capitalize())
+            
+    return ' '.join(result)
+
 def write_final_report(refined_query: str, analyses: List[Tuple[str, str]], search_results: List[Dict], initial_report: str) -> str:
     """
     Generate a final combined research report using the initial analysis as context.
@@ -234,8 +255,8 @@ def write_final_report(refined_query: str, analyses: List[Tuple[str, str]], sear
     - Generated on: <timestamp>
     - Abstract
     - Table of Contents
-    - Refined Query
-    - Overall Executive Summary (combined across all analyses)
+    - Research Questions
+    - Executive Summary (combined across all analyses)
     - Analyses 1-5
     - Sources
     """
@@ -253,8 +274,8 @@ def write_final_report(refined_query: str, analyses: List[Tuple[str, str]], sear
 
     Table of Contents:
     1. Abstract
-    2. Refined Query
-    3. Overall Executive Summary
+    2. Research Questions
+    3. Executive Summary
     4. Analysis 1
     5. Analysis 2
     6. Analysis 3
@@ -262,10 +283,10 @@ def write_final_report(refined_query: str, analyses: List[Tuple[str, str]], sear
     8. Analysis 5
     9. Sources
 
-    Refined Query:
+    Research Questions:
     {refined_query}
 
-    Overall Executive Summary:
+    Executive Summary:
     Produce one combined executive summary for the entire report using 3-5 bullet points.
     Ensure that it captures the most critical findings and recommendations across all analyses.
 
@@ -278,7 +299,7 @@ def write_final_report(refined_query: str, analyses: List[Tuple[str, str]], sear
     for idx, result in enumerate(search_results, 1):
          prompt += f"\n{idx}. [{result['title']}]({result['url']})"
     
-    prompt += "\n\nPlease produce the final report in clear markdown format with the above structure."
+    prompt += "\n\nPlease produce the final report in clear markdown format with the above structure. Do not put quotes around the Research Questions content."
 
     # Start a new Gemini chat and use the prompt
     chat = model.start_chat(history=[])
@@ -329,7 +350,20 @@ if submitted and query:
     # Generate final report automatically
     initial_report = ""
     for idx, (search_query, analysis) in enumerate(st.session_state.analyses, 1):
-        initial_report += f"### Analysis {idx}: {search_query}\n{analysis}\n\n"
+        # Extract the main title from the analysis content
+        # Look for a line starting with "Research Report:" or similar and use that as the section title
+        analysis_lines = analysis.split('\n')
+        title = None
+        for line in analysis_lines:
+            if line.strip().startswith('Research Report:') or line.strip().startswith('Title:'):
+                title = line.split(':', 1)[1].strip()
+                break
+        
+        if not title:
+            # Fallback to using the search query as title, converted to headline case
+            title = to_headline_case(search_query)
+            
+        initial_report += f"## {title}\n{analysis}\n\n"
 
     final_report = write_final_report(
         refined_query=st.session_state.refined_query,
