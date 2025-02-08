@@ -116,7 +116,7 @@ def scrape_urls_parallel(urls: List[str]) -> Dict[str, str]:
 
 def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
     """
-    Analyze search results using Gemini 2.0 Flash Thinking
+    Analyze search results using Gemini 2.0 Flash Thinking with enhanced expert analysis
     """
     chat = model.start_chat(history=[])
     
@@ -124,10 +124,24 @@ def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
     urls = [result['url'] for result in search_results]
     webpage_contents = scrape_urls_parallel(urls)
     
-    prompt = f"""
+    current_time = datetime.now().isoformat()
+    
+    system_prompt = f"""
+    You are an expert researcher and analyst. Today is {current_time}. 
+    
+    Core Analysis Guidelines:
+    - Treat all information as if presented to a highly experienced analyst
+    - Be extremely detailed and thorough in your analysis
+    - Maintain rigorous accuracy and cite specific evidence from the sources
+    - Focus on strong arguments and evidence over source authority
+    - Consider contrarian viewpoints and challenge conventional wisdom
+    - Flag any speculative conclusions or predictions clearly
+    - Be proactive in identifying implications the user may not have considered
+    - Organize information with clear structure and hierarchy
+    
     Research Query: {query}
     
-    Based on the following search results and their contents, provide a comprehensive analysis:
+    Analyze the following search results and their full contents comprehensively:
     
     {'-' * 50}
     """
@@ -137,12 +151,13 @@ def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
         content = webpage_contents.get(url, "Content not available")
         
         prompt += f"""
-        {idx}. Title: {result['title']}
+        Source {idx}:
+        Title: {result['title']}
         URL: {url}
         Description: {result['description']}
         
-        Content Summary:
-        {content[:2000]}  # Limit content length to manage token count
+        Full Content Analysis:
+        {content[:2000]}
         
         {'-' * 30}
         """
@@ -150,18 +165,50 @@ def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
     prompt += f"""
     {'-' * 50}
     
-    Please provide:
-    1. A comprehensive summary of the findings, incorporating details from the full webpage contents
-    2. Key insights and patterns across sources
-    3. Different perspectives or conflicting information found in the articles
-    4. Potential gaps in the research
-    5. Recommendations for further investigation
+    Provide a comprehensive expert analysis covering:
+
+    1. Core Findings
+    - Synthesize key discoveries from all sources
+    - Identify critical patterns and relationships
+    - Highlight unexpected or notable findings
     
-    Format your response in clear sections with markdown formatting.
+    2. Technical Analysis
+    - Detailed examination of methodologies used
+    - Evaluation of data quality and reliability
+    - Technical limitations or constraints identified
+    
+    3. Competing Perspectives
+    - Compare and contrast different viewpoints
+    - Analyze conflicts in methodology or conclusions
+    - Evaluate strength of supporting evidence
+    
+    4. Critical Gaps
+    - Identify missing information or unexplored areas
+    - Point out potential biases or limitations
+    - Flag areas needing additional verification
+    
+    5. Strategic Implications
+    - Long-term consequences and impacts
+    - Potential future developments
+    - Strategic recommendations
+    
+    6. Expert Recommendations
+    - Specific actions based on findings
+    - Priority areas for further investigation
+    - Alternative approaches to consider
+    
+    7. Speculative Analysis
+    - [SPECULATIVE] Clearly marked predictions or forecasts
+    - Potential emerging trends
+    - Alternative scenarios to consider
+    
+    Format your response using clear markdown structure with detailed subsections.
+    Prioritize accuracy and depth over brevity.
+    Challenge assumptions and consider non-obvious implications.
     """
     
     # Add progress indicator
-    with st.spinner("Analyzing webpage contents..."):
+    with st.spinner("Performing expert analysis of source materials..."):
         response = chat.send_message(prompt)
         return response.text
 
