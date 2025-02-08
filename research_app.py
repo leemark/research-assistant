@@ -262,7 +262,7 @@ def write_final_report(refined_query: str, analyses: List[Tuple[str, str]], sear
     """
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    # Build the final report prompt
+    # Build the final report prompt without sources
     prompt = f"""
     Using the initial report context provided below, draft a final combined research report with the following structure:
 
@@ -293,20 +293,23 @@ def write_final_report(refined_query: str, analyses: List[Tuple[str, str]], sear
 
     ## Analyses
     {initial_report}
-
-    ## Sources Analyzed
     """
-    # Append the sources list
-    for idx, result in enumerate(search_results, 1):
-         prompt += f"\n{idx}. [{result['title']}]({result['url']})"
     
-    prompt += "\n\nPlease produce the final report in clear markdown format with the above structure. Do not put quotes around the Research Questions content."
-
-    # Start a new Gemini chat and use the prompt
+    # Start a new Gemini chat and get the main report
     chat = model.start_chat(history=[])
     with st.spinner("Generating final report..."):
          final_response = chat.send_message(prompt)
-         return final_response.text
+         main_report = final_response.text
+
+    # Add sources section separately
+    sources_section = "\n## Sources Analyzed\n"
+    for idx, result in enumerate(search_results, 1):
+        sources_section += f"\n{idx}. [{result['title']}]({result['url']})"
+    
+    # Combine main report with sources
+    complete_report = f"{main_report.strip()}\n{sources_section}"
+    
+    return complete_report
 
 # Streamlit UI
 st.title("🔍 Deep Research Assistant")
