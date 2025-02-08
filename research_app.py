@@ -114,16 +114,17 @@ def scrape_urls_parallel(urls: List[str]) -> Dict[str, str]:
     
     return results
 
-def analyze_with_gemini(query: str, learnings: List[str], visited_urls: List[str]) -> str:
+def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
     """
-    Analyze research results using Gemini 2.0 Flash Thinking with enhanced expert analysis
+    Analyze search results using Gemini 2.0 Flash Thinking with enhanced expert analysis
     """
     chat = model.start_chat(history=[])
     
     current_time = datetime.now().isoformat()
     
     # First, let's scrape all URLs
-    webpage_contents = scrape_urls_parallel(visited_urls)
+    urls = [result['url'] for result in search_results]
+    webpage_contents = scrape_urls_parallel(urls)
     
     prompt = f"""
     You are an expert researcher and analyst. Today is {current_time}. 
@@ -140,24 +141,21 @@ def analyze_with_gemini(query: str, learnings: List[str], visited_urls: List[str
     
     Research Query: {query}
     
-    Key Learnings from Research:
-    {'-' * 50}
-    """
-    
-    for idx, learning in enumerate(learnings, 1):
-        prompt += f"\n{idx}. {learning}"
-    
-    prompt += f"""
-    
     Sources and Their Content:
     {'-' * 50}
     """
     
-    for idx, url in enumerate(visited_urls, 1):
+    for idx, result in enumerate(search_results, 1):
+        url = result['url']
         content = webpage_contents.get(url, "Content not available")
         prompt += f"""
-        Source {idx}: {url}
-        Content: {content[:5000]}  # Limiting content length to avoid token limits
+        Source {idx}:
+        Title: {result.get('title', 'No title')}
+        URL: {url}
+        Description: {result.get('description', 'No description')}
+        
+        Full Content:
+        {content[:5000]}  # Limiting content length to avoid token limits
         
         {'-' * 30}
         """
@@ -208,7 +206,7 @@ def analyze_with_gemini(query: str, learnings: List[str], visited_urls: List[str
     """
     
     # Add progress indicator
-    with st.spinner("Performing expert analysis of research findings..."):
+    with st.spinner("Performing expert analysis of source materials..."):
         response = chat.send_message(prompt)
         return response.text
 
