@@ -293,12 +293,11 @@ st.markdown("Powered by Brave Search and Google Gemini 2.0 Flash Thinking")
 # Input section
 with st.form("research_form"):
     query = st.text_input("Enter your research query:", placeholder="What would you like to research?")
-    num_results = st.slider("Number of search results to analyze per query:", min_value=5, max_value=20, value=10)
     submitted = st.form_submit_button("Start Research")
 
 if submitted and query:
     with st.spinner("Refining research query..."):
-         refined_query = refine_research_query(query)
+        refined_query = refine_research_query(query)
     st.session_state.refined_query = refined_query  # Store in session state
     st.markdown(f"**Refined Research Query:** {refined_query}")
 
@@ -315,7 +314,7 @@ if submitted and query:
     for i, web_search_query in enumerate(web_search_queries, 1):
         with st.spinner(f"Processing search query {i} of 5: {web_search_query}"):
             # Search using current query
-            current_results = brave_search(web_search_query, num_results)
+            current_results = brave_search(web_search_query)
             all_search_results.extend(current_results)
             
             if current_results:
@@ -326,6 +325,34 @@ if submitted and query:
     # Store results in session state
     st.session_state.search_results = all_search_results
     st.session_state.analyses = all_analyses
+
+    # Generate final report automatically
+    initial_report = ""
+    for idx, (search_query, analysis) in enumerate(st.session_state.analyses, 1):
+        initial_report += f"### Analysis {idx}: {search_query}\n{analysis}\n\n"
+
+    final_report = write_final_report(
+        refined_query=st.session_state.refined_query,
+        analyses=st.session_state.analyses,
+        search_results=st.session_state.search_results,
+        initial_report=initial_report
+    )
+    
+    # Display the final report in the Streamlit app
+    st.markdown("## 📊 Final Research Report")
+    st.markdown(final_report)
+    
+    # Generate a timestamp for the file name
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    export_filename = f"research_report_{timestamp}.md"
+    
+    # Provide a download button for the final report
+    st.download_button(
+        label="📥 Export Final Report",
+        data=final_report,
+        file_name=export_filename,
+        mime="text/markdown"
+    )
 
 # Display results
 if hasattr(st.session_state, 'analyses') and st.session_state.analyses:
@@ -342,33 +369,4 @@ if hasattr(st.session_state, 'analyses') and st.session_state.analyses:
         st.subheader("🤖 AI Analysis")
         for idx, (search_query, analysis) in enumerate(st.session_state.analyses, 1):
             with st.expander(f"Analysis for Query {idx}: {search_query}"):
-                st.markdown(analysis)
-
-# New button to generate the combined final report and make it available for download
-if st.button("Generate Final Report"):
-    # Combine all analyses into a single string; adjust formatting as needed.
-    initial_report = ""
-    for idx, (search_query, analysis) in enumerate(st.session_state.analyses, 1):
-        initial_report += f"### Analysis {idx}: {search_query}\n{analysis}\n\n"
-
-    final_report = write_final_report(
-        refined_query=st.session_state.refined_query,
-        analyses=st.session_state.analyses,
-        search_results=st.session_state.search_results,
-        initial_report=initial_report
-    )
-    
-    # Display the final report in the Streamlit app
-    st.markdown(final_report)
-    
-    # Generate a timestamp for the file name
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    export_filename = f"research_report_{timestamp}.md"
-    
-    # Provide a download button for the final report
-    st.download_button(
-        label="📥 Export Final Report",
-        data=final_report,
-        file_name=export_filename,
-        mime="text/markdown"
-    ) 
+                st.markdown(analysis) 
