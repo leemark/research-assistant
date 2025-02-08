@@ -142,6 +142,12 @@ if 'analysis' not in st.session_state:
     st.session_state.analysis = ""
 if 'refined_query' not in st.session_state:
     st.session_state.refined_query = ""
+if 'research_iterations' not in st.session_state:
+    st.session_state.research_iterations = []
+if 'knowledge_graph' not in st.session_state:
+    st.session_state.knowledge_graph = {}
+if 'current_iteration' not in st.session_state:
+    st.session_state.current_iteration = 0
 
 # Updated Gemini model configuration
 generation_config = {
@@ -449,6 +455,153 @@ def write_final_report(refined_query: str, analyses: List[Tuple[str, str]], sear
          final_response = chat.send_message(prompt)
          return final_response.text
 
+def identify_knowledge_gaps(analysis: str) -> List[str]:
+    """
+    Analyze the current research findings to identify knowledge gaps and areas needing deeper investigation.
+    Returns a list of specific questions or topics that need further research.
+    """
+    prompt = f"""
+    As an expert researcher, analyze the following research findings and identify specific knowledge gaps 
+    or areas that require deeper investigation. Focus on:
+    1. Unanswered questions in the current analysis
+    2. Conflicting information that needs resolution
+    3. Topics mentioned but not fully explored
+    4. Potential connections or implications not yet investigated
+    5. Missing context or background information
+
+    Current Analysis:
+    {analysis}
+
+    Return ONLY a list of 3-5 specific questions or topics that need further investigation.
+    Each item should be clear and focused enough to serve as a new search query.
+    Format: One item per line, no numbering or bullets.
+    """
+    
+    response = model.generate_content(prompt)
+    gaps = [gap.strip() for gap in response.text.strip().split('\n') if gap.strip()]
+    return gaps[:5]  # Ensure we return at most 5 gaps
+
+def synthesize_iterations(iterations: List[Dict]) -> str:
+    """
+    Synthesize findings across multiple research iterations into a cohesive analysis.
+    Each iteration contains the original query, search results, and analysis.
+    """
+    prompt = f"""
+    As an expert researcher, synthesize the findings from multiple research iterations into a comprehensive analysis.
+    Focus on:
+    1. How later iterations built upon or refined earlier findings
+    2. Resolution of knowledge gaps identified in earlier iterations
+    3. Evolution of understanding across iterations
+    4. Emerging patterns or themes
+    5. Remaining open questions or areas for future research
+
+    Research Iterations:
+    {'-' * 50}
+    """
+    
+    for idx, iteration in enumerate(iterations, 1):
+        prompt += f"""
+        Iteration {idx}:
+        Query: {iteration['query']}
+        Analysis Summary: {iteration['analysis'][:2000]}  # Limit length for token management
+        Knowledge Gaps Addressed: {', '.join(iteration.get('gaps_addressed', []))}
+        
+        {'-' * 30}
+        """
+    
+    prompt += """
+    Please provide:
+    1. A synthesis of how understanding evolved across iterations
+    2. Key insights that emerged from the iterative process
+    3. How knowledge gaps were addressed
+    4. Remaining open questions
+    5. Recommendations for future research
+    
+    Format your response in clear markdown sections.
+    """
+    
+    chat = model.start_chat(history=[])
+    response = chat.send_message(prompt)
+    return response.text
+
+def update_knowledge_graph(current_findings: str, knowledge_graph: Dict) -> Dict:
+    """
+    Update the knowledge graph with new findings and connections.
+    The knowledge graph tracks key concepts, their relationships, and confidence levels.
+    """
+    prompt = f"""
+    Analyze the current findings and update the knowledge graph. Focus on:
+    1. New concepts/entities discovered
+    2. New relationships between existing concepts
+    3. Updated confidence levels for existing information
+    4. Conflicting information that needs resolution
+
+    Current Findings:
+    {current_findings}
+
+    Existing Knowledge Graph:
+    {json.dumps(knowledge_graph, indent=2)}
+
+    Return a JSON object representing the updated knowledge graph with the following structure:
+    {{
+        "concepts": {{
+            "concept_name": {{
+                "confidence": float,  # 0.0 to 1.0
+                "related_concepts": [str],
+                "supporting_evidence": [str],
+                "conflicting_evidence": [str]
+            }}
+        }},
+        "relationships": [
+            {{
+                "source": str,
+                "target": str,
+                "type": str,
+                "confidence": float
+            }}
+        ]
+    }}
+    """
+    
+    response = model.generate_content(prompt)
+    try:
+        updated_graph = json.loads(response.text)
+        return updated_graph
+    except json.JSONDecodeError:
+        st.warning("Failed to update knowledge graph. Continuing with existing graph.")
+        return knowledge_graph
+
+def determine_next_iteration(knowledge_gaps: List[str], knowledge_graph: Dict) -> Tuple[bool, str]:
+    """
+    Determine if another research iteration is needed and what it should focus on.
+    Returns a tuple of (should_continue: bool, next_query: str)
+    """
+    prompt = f"""
+    Analyze the current research state and determine if another iteration would be valuable.
+    Consider:
+    1. Identified knowledge gaps: {knowledge_gaps}
+    2. Current knowledge confidence levels from graph
+    3. Potential for new insights
+    4. Diminishing returns
+
+    Knowledge Graph Summary:
+    {json.dumps(knowledge_graph, indent=2)}
+
+    Return a JSON object:
+    {{
+        "should_continue": boolean,
+        "next_query": string,  # Most promising gap to investigate next, or empty if should_continue is false
+        "reasoning": string    # Brief explanation of the decision
+    }}
+    """
+    
+    response = model.generate_content(prompt)
+    try:
+        decision = json.loads(response.text)
+        return decision["should_continue"], decision["next_query"]
+    except (json.JSONDecodeError, KeyError):
+        return False, ""
+
 # Streamlit UI
 st.title("🔍 Deep FREEsearch")
 st.markdown("*Your AI-powered research assistant*")
@@ -456,59 +609,91 @@ st.markdown("*Your AI-powered research assistant*")
 # Input section
 with st.form("research_form"):
     query = st.text_input("Enter your research query:", placeholder="What would you like to research?")
+    max_iterations = st.slider("Maximum research iterations:", min_value=1, max_value=5, value=3)
     submitted = st.form_submit_button("Start Research")
 
 if submitted and query:
-    # Create a container for initial outputs that we'll clear later
-    initial_output_container = st.empty()
+    # Create a container for progress tracking
+    progress_container = st.empty()
+    status_container = st.empty()
     
-    with initial_output_container:
-        with st.spinner("Refining research query..."):
-            refined_query = refine_research_query(query)
-        st.session_state.refined_query = refined_query  # Store in session state
-        st.markdown(f"**Refined Research Query:** {refined_query}")
-
-        with st.spinner("Generating search queries..."):
-             web_search_queries = simplify_search_query(refined_query)
+    # Initialize or reset research state
+    if st.session_state.current_iteration == 0:
+        st.session_state.research_iterations = []
+        st.session_state.knowledge_graph = {}
     
-    all_search_results = []
-    all_analyses = []
-
-    for i, web_search_query in enumerate(web_search_queries, 1):
-        with st.spinner(f"Processing search query {i} of 5: {web_search_query}"):
-            # Search using current query
-            current_results = brave_search(web_search_query)
-            all_search_results.extend(current_results)
-            
-            if current_results:
-                # Analyze current results
-                current_analysis = analyze_with_gemini(f"{refined_query} (Search Query {i}: {web_search_query})", current_results)
-                all_analyses.append((web_search_query, current_analysis))
-
-    # Store results in session state
-    st.session_state.search_results = all_search_results
-    st.session_state.analyses = all_analyses
-    
-    # Generate final report automatically
-    initial_report = ""
-    for idx, (search_query, analysis) in enumerate(st.session_state.analyses, 1):
-        analysis_lines = analysis.split('\n')
-        title = None
-        for line in analysis_lines:
-            if line.strip().startswith('Research Report:') or line.strip().startswith('Title:'):
-                title = line.split(':', 1)[1].strip()
-                break
+    while st.session_state.current_iteration < max_iterations:
+        current_iteration = st.session_state.current_iteration + 1
         
-        if not title:
-            title = to_headline_case(search_query)
+        # Update progress
+        progress_container.progress(current_iteration / max_iterations)
+        status_container.markdown(f"**Research Iteration {current_iteration}/{max_iterations}**")
+        
+        # If it's the first iteration, use the original query
+        # Otherwise, use the query determined from the previous iteration's gaps
+        if current_iteration == 1:
+            current_query = query
+        else:
+            # Analyze previous iteration's findings for gaps
+            prev_iteration = st.session_state.research_iterations[-1]
+            gaps = identify_knowledge_gaps(prev_iteration['analysis'])
+            should_continue, next_query = determine_next_iteration(gaps, st.session_state.knowledge_graph)
             
-        initial_report += f"## {title}\n{analysis}\n\n"
-
+            if not should_continue:
+                status_container.markdown("✅ Research complete! No significant gaps remaining.")
+                break
+                
+            current_query = next_query
+        
+        # Perform the current iteration's research
+        with st.spinner(f"Iteration {current_iteration}: Refining query..."):
+            refined_query = refine_research_query(current_query)
+            web_search_queries = simplify_search_query(refined_query)
+        
+        current_results = []
+        current_analyses = []
+        
+        for i, web_search_query in enumerate(web_search_queries, 1):
+            with st.spinner(f"Iteration {current_iteration}: Processing search query {i} of 5..."):
+                # Search using current query
+                search_results = brave_search(web_search_query)
+                current_results.extend(search_results)
+                
+                if search_results:
+                    # Analyze current results
+                    analysis = analyze_with_gemini(f"{refined_query} (Search Query {i}: {web_search_query})", search_results)
+                    current_analyses.append((web_search_query, analysis))
+        
+        # Combine analyses for this iteration
+        combined_analysis = ""
+        for idx, (search_query, analysis) in enumerate(current_analyses, 1):
+            title = to_headline_case(search_query)
+            combined_analysis += f"## {title}\n{analysis}\n\n"
+        
+        # Update knowledge graph with new findings
+        st.session_state.knowledge_graph = update_knowledge_graph(combined_analysis, st.session_state.knowledge_graph)
+        
+        # Store iteration results
+        st.session_state.research_iterations.append({
+            'query': current_query,
+            'refined_query': refined_query,
+            'search_results': current_results,
+            'analysis': combined_analysis,
+            'knowledge_graph_state': st.session_state.knowledge_graph.copy()
+        })
+        
+        # Update iteration counter
+        st.session_state.current_iteration += 1
+    
+    # Generate final synthesis across all iterations
+    final_synthesis = synthesize_iterations(st.session_state.research_iterations)
+    
+    # Generate final report
     final_report = write_final_report(
-        refined_query=st.session_state.refined_query,
-        analyses=st.session_state.analyses,
-        search_results=st.session_state.search_results,
-        initial_report=initial_report
+        refined_query=st.session_state.research_iterations[0]['refined_query'],  # Use initial refined query
+        analyses=[(iter['query'], iter['analysis']) for iter in st.session_state.research_iterations],
+        search_results=sum([iter['search_results'] for iter in st.session_state.research_iterations], []),
+        initial_report=final_synthesis
     )
     
     # Clean up the report
@@ -521,8 +706,12 @@ if submitted and query:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     st.session_state.export_filename = f"research_report_{timestamp}.md"
     
-    # Clear the initial output container once we have the final report
-    initial_output_container.empty()
+    # Clear progress tracking
+    progress_container.empty()
+    status_container.empty()
+    
+    # Reset iteration counter for next research session
+    st.session_state.current_iteration = 0
 
 # Display results if available
 if hasattr(st.session_state, 'final_report'):
