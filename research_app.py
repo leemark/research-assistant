@@ -13,7 +13,7 @@ import pathlib
 
 # Configure page settings
 st.set_page_config(
-    page_title="Deep Research Assistant",
+    page_title="Deep FREEsearch",
     page_icon="🔍",
     layout="wide"
 )
