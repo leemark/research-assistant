@@ -264,22 +264,22 @@ def write_final_report(refined_query: str, analyses: List[Tuple[str, str]], sear
     
     # Build the final report prompt
     prompt = f"""
-    Using the initial report context provided below, draft a final combined research report with the following structure:
+    Using the initial report context provided below, draft a final combined research report with the following structure.
+    IMPORTANT: The title and timestamp must be included exactly as shown below, maintaining the exact formatting:
 
-    [Your Title Here, e.g., "Deep Research on {refined_query}"]
-    Generated on: {current_time}
+    # Deep Research on {refined_query}
+    *Generated on: {current_time}*
 
     ## Table of Contents
-    1. [Table of Contents](#table-of-contents)
-    2. [Abstract](#abstract)
-    3. [Research Questions](#research-questions)
-    4. [Executive Summary](#executive-summary)
-    5. [Title of Analysis 1](#title-of-analysis-1)
-    6. [Title of Analysis 2](#title-of-analysis-2)
-    7. [Title of Analysis 3](#title-of-analysis-3)
-    8. [Title of Analysis 4](#title-of-analysis-4)
-    9. [Title of Analysis 5](#title-of-analysis-5)
-    10. [Sources Analyzed](#sources-analyzed)
+    1. [Abstract](#abstract)
+    2. [Research Questions](#research-questions)
+    3. [Executive Summary](#executive-summary)
+    4. [Title of Analysis 1](#title-of-analysis-1)
+    5. [Title of Analysis 2](#title-of-analysis-2)
+    6. [Title of Analysis 3](#title-of-analysis-3)
+    7. [Title of Analysis 4](#title-of-analysis-4)
+    8. [Title of Analysis 5](#title-of-analysis-5)
+    9. [Sources Analyzed](#sources-analyzed)
 
     ## Abstract
     Provide a brief summary of the entire research report.
@@ -394,5 +394,4 @@ if hasattr(st.session_state, 'final_report'):
     )
     
     # Display the final report in a dedicated section
-    st.markdown("## 📊 Final Research Report")
     st.markdown(st.session_state.final_report) 
