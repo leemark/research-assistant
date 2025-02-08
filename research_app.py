@@ -325,7 +325,7 @@ if submitted and query:
     # Store results in session state
     st.session_state.search_results = all_search_results
     st.session_state.analyses = all_analyses
-
+    
     # Generate final report automatically
     initial_report = ""
     for idx, (search_query, analysis) in enumerate(st.session_state.analyses, 1):
@@ -338,24 +338,32 @@ if submitted and query:
         initial_report=initial_report
     )
     
-    # Display the final report in the Streamlit app
-    st.markdown("## 📊 Final Research Report")
-    st.markdown(final_report)
+    # Clean up the report by removing unwanted markdown markers
+    final_report = final_report.replace("```markdown", "").replace("```", "").strip()
     
-    # Generate a timestamp for the file name
+    # Store final report in session state
+    st.session_state.final_report = final_report
+    
+    # Generate timestamp for the file name
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    export_filename = f"research_report_{timestamp}.md"
-    
-    # Provide a download button for the final report
-    st.download_button(
+    st.session_state.export_filename = f"research_report_{timestamp}.md"
+
+# Display results if available
+if hasattr(st.session_state, 'analyses') and st.session_state.analyses:
+    # Display download button in a small container at the top
+    st.container().download_button(
         label="📥 Export Final Report",
-        data=final_report,
-        file_name=export_filename,
+        data=st.session_state.final_report,
+        file_name=st.session_state.export_filename,
         mime="text/markdown"
     )
-
-# Display results
-if hasattr(st.session_state, 'analyses') and st.session_state.analyses:
+    
+    # Display the final report in a dedicated section
+    st.markdown("## 📊 Final Research Report")
+    st.markdown(st.session_state.final_report)
+    
+    # Display detailed results in columns
+    st.markdown("## Detailed Results")
     col1, col2 = st.columns([1, 1])
     
     with col1:
