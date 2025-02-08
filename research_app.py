@@ -266,34 +266,34 @@ def write_final_report(refined_query: str, analyses: List[Tuple[str, str]], sear
     prompt = f"""
     Using the initial report context provided below, draft a final combined research report with the following structure:
 
-    Title of Paper: [Your Title Here, e.g., "Deep Research on {refined_query}"]
+    [Your Title Here, e.g., "Deep Research on {refined_query}"]
     Generated on: {current_time}
 
     Abstract:
     Provide a brief summary of the entire research report.
 
-    Table of Contents:
-    1. Abstract
-    2. Research Questions
-    3. Executive Summary
-    4. Analysis 1
-    5. Analysis 2
-    6. Analysis 3
-    7. Analysis 4
-    8. Analysis 5
-    9. Sources
+    ## Table of Contents
+    1. [Abstract](#abstract)
+    2. [Research Question(s)](#research-questions)
+    3. [Executive Summary](#executive-summary)
+    4. [Title of Analysis 1](#title-of-analysis-1)
+    5. [Title of Analysis 2](#title-of-analysis-2)
+    6. [Title of Analysis 3](#title-of-analysis-3)
+    7. [Title of Analysis 4](#title-of-analysis-4)
+    8. [Title of Analysis 5](#title-of-analysis-5)
+    9. [Sources Analyzed](#sources-analyzed)
 
-    Research Questions:
+    ## Research Questions
     {refined_query}
 
-    Executive Summary:
-    Produce one combined executive summary for the entire report using 3-5 bullet points.
+    ## Executive Summary
+    Produce one combined executive summary for the entire report using 5-8 bullet points or 3-4 paragraphs.
     Ensure that it captures the most critical findings and recommendations across all analyses.
 
-    Analyses:
+    ## Analyses
     {initial_report}
 
-    Sources:
+    ## Sources Analyzed
     """
     # Append the sources list
     for idx, result in enumerate(search_results, 1):
@@ -309,7 +309,7 @@ def write_final_report(refined_query: str, analyses: List[Tuple[str, str]], sear
 
 # Streamlit UI
 st.title("🔍 Deep Research Assistant")
-st.markdown("Powered by Brave Search and Google Gemini 2.0 Flash Thinking")
+st.markdown("Powered by Google Gemini 2.0 Flash Thinking and Brave Search")
 
 # Input section
 with st.form("research_form"):
