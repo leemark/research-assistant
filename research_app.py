@@ -165,7 +165,7 @@ def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
         Description: {result['description']}
         
         Content Summary:
-        {content[:2000]}  # Limit content length to manage token count
+        {content[:4000]}  # Limit content length to manage token count
         
         {'-' * 30}
         """
@@ -325,10 +325,6 @@ if submitted and query:
     with st.spinner("Generating search queries..."):
          web_search_queries = simplify_search_query(refined_query)
     
-    st.markdown("**Generated Search Queries:**")
-    for i, search_query in enumerate(web_search_queries, 1):
-        st.markdown(f"{i}. {search_query}")
-
     all_search_results = []
     all_analyses = []
 
@@ -394,21 +390,4 @@ if hasattr(st.session_state, 'analyses') and st.session_state.analyses:
     
     # Display the final report in a dedicated section
     st.markdown("## 📊 Final Research Report")
-    st.markdown(st.session_state.final_report)
-    
-    # Display detailed results in columns
-    st.markdown("## Detailed Results")
-    col1, col2 = st.columns([1, 1])
-    
-    with col1:
-        st.subheader("📚 Search Results")
-        for idx, result in enumerate(st.session_state.search_results, 1):
-            with st.expander(f"{idx}. {result['title']}"):
-                st.write(result['description'])
-                st.markdown(f"[Read more]({result['url']})")
-    
-    with col2:
-        st.subheader("🤖 AI Analysis")
-        for idx, (search_query, analysis) in enumerate(st.session_state.analyses, 1):
-            with st.expander(f"Analysis for Query {idx}: {search_query}"):
-                st.markdown(analysis) 
+    st.markdown(st.session_state.final_report) 
