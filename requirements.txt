@@ -1,4 +1,5 @@
 streamlit
 requests
 google-generativeai>=0.3.0
-python-dotenv 
+python-dotenv
+beautifulsoup4 

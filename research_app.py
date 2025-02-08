@@ -4,6 +4,10 @@ import google.generativeai as genai
 from typing import List, Dict
 import os
 from datetime import datetime
+from bs4 import BeautifulSoup
+import concurrent.futures
+import time
+from urllib.parse import urlparse
 
 # Configure page settings
 st.set_page_config(
@@ -62,38 +66,104 @@ def brave_search(query: str, num_results: int = 10) -> List[Dict]:
         st.error(f"Search API Error: {response.status_code}")
         return []
 
+def scrape_webpage(url: str) -> str:
+    """
+    Scrape content from a webpage with error handling
+    """
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Remove script and style elements
+        for script in soup(["script", "style"]):
+            script.decompose()
+            
+        # Get text content
+        text = soup.get_text(separator=' ', strip=True)
+        
+        # Basic text cleaning
+        lines = (line.strip() for line in text.splitlines())
+        chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+        text = ' '.join(chunk for chunk in chunks if chunk)
+        
+        # Limit text length to avoid token limits
+        return text[:10000]  # Adjust limit as needed
+        
+    except Exception as e:
+        return f"Error scraping {url}: {str(e)}"
+
+def scrape_urls_parallel(urls: List[str]) -> Dict[str, str]:
+    """
+    Scrape multiple URLs in parallel
+    """
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        future_to_url = {executor.submit(scrape_webpage, url): url for url in urls}
+        results = {}
+        
+        for future in concurrent.futures.as_completed(future_to_url):
+            url = future_to_url[future]
+            try:
+                results[url] = future.result()
+            except Exception as e:
+                results[url] = f"Error: {str(e)}"
+    
+    return results
+
 def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
     """
     Analyze search results using Gemini 2.0 Flash Thinking
     """
     chat = model.start_chat(history=[])
     
+    # Scrape webpage contents
+    urls = [result['url'] for result in search_results]
+    webpage_contents = scrape_urls_parallel(urls)
+    
     prompt = f"""
     Research Query: {query}
     
-    Based on the following search results, provide a comprehensive analysis:
+    Based on the following search results and their contents, provide a comprehensive analysis:
     
     {'-' * 50}
     """
     
     for idx, result in enumerate(search_results, 1):
-        prompt += f"\n{idx}. Title: {result['title']}\nDescription: {result['description']}\nURL: {result['url']}\n"
+        url = result['url']
+        content = webpage_contents.get(url, "Content not available")
+        
+        prompt += f"""
+        {idx}. Title: {result['title']}
+        URL: {url}
+        Description: {result['description']}
+        
+        Content Summary:
+        {content[:2000]}  # Limit content length to manage token count
+        
+        {'-' * 30}
+        """
     
     prompt += f"""
     {'-' * 50}
     
     Please provide:
-    1. A comprehensive summary of the findings
-    2. Key insights and patterns
-    3. Different perspectives or conflicting information
+    1. A comprehensive summary of the findings, incorporating details from the full webpage contents
+    2. Key insights and patterns across sources
+    3. Different perspectives or conflicting information found in the articles
     4. Potential gaps in the research
     5. Recommendations for further investigation
     
     Format your response in clear sections with markdown formatting.
     """
     
-    response = chat.send_message(prompt)
-    return response.text
+    # Add progress indicator
+    with st.spinner("Analyzing webpage contents..."):
+        response = chat.send_message(prompt)
+        return response.text
 
 # Streamlit UI
 st.title("🔍 Deep Research Assistant")
