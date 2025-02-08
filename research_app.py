@@ -169,37 +169,39 @@ def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
     - Synthesize key discoveries from all sources
     - Identify critical patterns and relationships
     - Highlight unexpected or notable findings
-    
+
     2. Technical Analysis
     - Detailed examination of methodologies used
     - Evaluation of data quality and reliability
     - Technical limitations or constraints identified
-    
+
     3. Competing Perspectives
     - Compare and contrast different viewpoints
     - Analyze conflicts in methodology or conclusions
     - Evaluate strength of supporting evidence
-    
+
     4. Critical Gaps
     - Identify missing information or unexplored areas
     - Point out potential biases or limitations
     - Flag areas needing additional verification
-    
+
     5. Strategic Implications
     - Long-term consequences and impacts
     - Potential future developments
     - Strategic recommendations
-    
+
     6. Expert Recommendations
     - Specific actions based on findings
     - Priority areas for further investigation
     - Alternative approaches to consider
-    
+
     7. Speculative Analysis
     - [SPECULATIVE] Clearly marked predictions or forecasts
     - Potential emerging trends
     - Alternative scenarios to consider
-    
+
+    **Important:** In your analysis, please include inline citations referencing the provided sources (e.g., [Source 1]). Ensure that each key point is explicitly supported by evidence from at least one of the sources above. If you reference general expertise beyond these sources, clearly indicate so.
+
     Format your response using clear markdown structure with detailed subsections.
     Prioritize accuracy and depth over brevity.
     Challenge assumptions and consider non-obvious implications.
