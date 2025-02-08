@@ -167,9 +167,9 @@ def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
     Format your response in clear markdown sections.
     """
     
-    # Add progress indicator
+    chat = model.start_chat(history=[])
     with st.spinner("Analyzing webpage contents..."):
-        response = model.send_message(prompt)
+        response = chat.send_message(prompt)
         return response.text
 
 # Streamlit UI
