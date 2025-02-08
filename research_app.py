@@ -193,6 +193,21 @@ def refine_research_query(original_query: str) -> str:
     refined_query = response.text.strip()
     return refined_query
 
+def simplify_search_query(refined_query: str) -> str:
+    """
+    Convert the refined research query into a succinct web search query suitable for using as a search term.
+    """
+    prompt = f"""
+    Convert the following refined research query into a concise web search query that focuses on the most relevant keywords:
+    
+    {refined_query}
+    
+    Provide only the concise search query in your response.
+    """
+    response = model.generate_content(prompt)
+    search_query = response.text.strip()
+    return search_query
+
 # Streamlit UI
 st.title("🔍 Deep Research Assistant")
 st.markdown("Powered by Brave Search and Google Gemini")
@@ -207,11 +222,17 @@ if submitted and query:
     with st.spinner("Refining research query..."):
          refined_query = refine_research_query(query)
     st.markdown(f"**Refined Research Query:** {refined_query}")
+
+    with st.spinner("Simplifying search query..."):
+         web_search_query = simplify_search_query(refined_query)
+    st.markdown(f"**Web Search Query:** {web_search_query}")
+
     with st.spinner("Searching and analyzing..."):
-         # Use the refined query for search and analysis
-         st.session_state.search_results = brave_search(refined_query, num_results)
+         # Use the simplified web search query for Brave Search API
+         st.session_state.search_results = brave_search(web_search_query, num_results)
         
          if st.session_state.search_results:
+             # Use the refined query for analysis to maintain depth and detail
              st.session_state.analysis = analyze_with_gemini(refined_query, st.session_state.search_results)
 
 # Display results
