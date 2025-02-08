@@ -21,6 +21,8 @@ if 'search_results' not in st.session_state:
     st.session_state.search_results = []
 if 'analysis' not in st.session_state:
     st.session_state.analysis = ""
+if 'refined_query' not in st.session_state:
+    st.session_state.refined_query = ""
 
 # Configure API keys
 BRAVE_API_KEY = st.secrets["BRAVE_API_KEY"]
@@ -222,6 +224,7 @@ with st.form("research_form"):
 if submitted and query:
     with st.spinner("Refining research query..."):
          refined_query = refine_research_query(query)
+    st.session_state.refined_query = refined_query  # Store in session state
     st.markdown(f"**Refined Research Query:** {refined_query}")
 
     with st.spinner("Generating search queries..."):
@@ -275,7 +278,7 @@ if hasattr(st.session_state, 'analyses') and st.session_state.analyses:
 Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
 ## Refined Research Query
-{refined_query}
+{st.session_state.refined_query}
 
 """
     
