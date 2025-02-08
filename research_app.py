@@ -41,7 +41,7 @@ generation_config = {
 model = genai.GenerativeModel(
     model_name="gemini-2.0-flash-thinking-exp-01-21",
     generation_config=generation_config,
-)
+) 
 
 def brave_search(query: str, num_results: int = 10) -> List[Dict]:
     """
@@ -212,6 +212,159 @@ def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
         response = chat.send_message(prompt)
         return response.text
 
+def generate_search_queries(query: str, learnings: List[str] = None, num_queries: int = 3) -> List[Dict]:
+    """
+    Generate multiple search queries to explore the topic more broadly
+    """
+    prompt = f"""
+    Given the following research query, generate {num_queries} unique search queries to explore different aspects:
+    Query: {query}
+    
+    {f'Previous learnings:\n{chr(10).join(learnings)}' if learnings else ''}
+    
+    Return each query with its research goal and follow-up directions.
+    """
+    
+    response = model.generate_content(prompt)
+    # Parse response to extract queries and goals
+    # This is a simplified version - you might want to add more structure
+    queries = []
+    try:
+        lines = response.text.split('\n')
+        current_query = {}
+        for line in lines:
+            if line.startswith('Query:'):
+                if current_query:
+                    queries.append(current_query)
+                current_query = {'query': line.replace('Query:', '').strip()}
+            elif line.startswith('Goal:') and current_query:
+                current_query['goal'] = line.replace('Goal:', '').strip()
+        if current_query:
+            queries.append(current_query)
+    except Exception as e:
+        st.error(f"Error parsing queries: {str(e)}")
+        queries = [{'query': query, 'goal': 'Original query'}]
+    
+    return queries[:num_queries]
+
+def process_search_results(query: str, search_results: List[Dict], webpage_contents: Dict[str, str], 
+                         num_learnings: int = 3, num_followup: int = 3) -> Dict:
+    """
+    Process search results to extract learnings and follow-up questions
+    """
+    prompt = f"""
+    Analyze the following search results for the query: "{query}"
+    
+    {'-' * 50}
+    """
+    
+    for idx, result in enumerate(search_results, 1):
+        content = webpage_contents.get(result['url'], "Content not available")
+        prompt += f"""
+        Source {idx}:
+        Title: {result['title']}
+        Content: {content[:2000]}
+        
+        {'-' * 30}
+        """
+    
+    prompt += f"""
+    Please provide:
+    1. Top {num_learnings} key learnings (be specific, include metrics and entities)
+    2. {num_followup} follow-up questions for deeper research
+    """
+    
+    response = model.generate_content(prompt)
+    
+    # Parse response to extract learnings and questions
+    try:
+        sections = response.text.split('Follow-up questions:')
+        learnings = [l.strip() for l in sections[0].split('\n') if l.strip()]
+        questions = [q.strip() for q in sections[1].split('\n') if q.strip()]
+        return {
+            'learnings': learnings[:num_learnings],
+            'followup_questions': questions[:num_followup]
+        }
+    except Exception as e:
+        st.error(f"Error parsing results: {str(e)}")
+        return {'learnings': [], 'followup_questions': []}
+
+def deep_research(query: str, breadth: int = 3, depth: int = 2, 
+                 learnings: List[str] = None, visited_urls: List[str] = None) -> Dict:
+    """
+    Perform recursive deep research with breadth and depth
+    """
+    if learnings is None:
+        learnings = []
+    if visited_urls is None:
+        visited_urls = []
+        
+    search_queries = generate_search_queries(query, learnings, breadth)
+    all_learnings = learnings.copy()
+    all_urls = visited_urls.copy()
+    
+    for search_query in search_queries:
+        try:
+            results = brave_search(search_query['query'])
+            new_urls = [r['url'] for r in results]
+            webpage_contents = scrape_urls_parallel([url for url in new_urls if url not in all_urls])
+            
+            processed_results = process_search_results(
+                search_query['query'], 
+                results, 
+                webpage_contents
+            )
+            
+            all_learnings.extend(processed_results['learnings'])
+            all_urls.extend(new_urls)
+            
+            if depth > 1:
+                for followup in processed_results['followup_questions']:
+                    deeper_results = deep_research(
+                        followup,
+                        breadth=max(2, breadth-1),
+                        depth=depth-1,
+                        learnings=all_learnings,
+                        visited_urls=all_urls
+                    )
+                    all_learnings.extend(deeper_results['learnings'])
+                    all_urls.extend(deeper_results['visited_urls'])
+                    
+        except Exception as e:
+            st.error(f"Error in research: {str(e)}")
+            continue
+    
+    return {
+        'learnings': list(set(all_learnings)),
+        'visited_urls': list(set(all_urls))
+    }
+
+def generate_feedback(query: str, num_questions: int = 3) -> List[str]:
+    """
+    Generate clarifying questions for the research query
+    """
+    prompt = f"""
+    Given the following research query, generate {num_questions} clarifying questions 
+    to better understand the research direction:
+    
+    Query: {query}
+    
+    The questions should help:
+    - Narrow down the scope if too broad
+    - Clarify ambiguous terms
+    - Identify specific aspects of interest
+    - Determine the desired depth of research
+    """
+    
+    response = model.generate_content(prompt)
+    
+    try:
+        questions = [q.strip() for q in response.text.split('\n') if q.strip()]
+        return questions[:num_questions]
+    except Exception as e:
+        st.error(f"Error generating feedback: {str(e)}")
+        return []
+
 # Streamlit UI
 st.title("🔍 Deep Research Assistant")
 st.markdown("Powered by Brave Search and Google Gemini")
@@ -219,17 +372,39 @@ st.markdown("Powered by Brave Search and Google Gemini")
 # Input section
 with st.form("research_form"):
     query = st.text_input("Enter your research query:", placeholder="What would you like to research?")
-    num_results = st.slider("Number of search results to analyze:", min_value=5, max_value=20, value=10)
-    submitted = st.form_submit_button("Start Research")
+    
+    if query:
+        feedback_questions = generate_feedback(query)
+        if feedback_questions:
+            st.subheader("📝 Before we begin, let's clarify:")
+            for q in feedback_questions:
+                answer = st.text_input(q)
+                if answer:
+                    query += f"\nContext - {q}: {answer}"
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        breadth = st.slider("Research breadth:", min_value=2, max_value=5, value=3,
+                          help="Number of parallel search queries")
+    with col2:
+        depth = st.slider("Research depth:", min_value=1, max_value=3, value=2,
+                         help="Number of recursive follow-up rounds")
+    
+    submitted = st.form_submit_button("Start Deep Research")
 
 if submitted and query:
-    with st.spinner("Searching and analyzing..."):
-        # Perform search
-        st.session_state.search_results = brave_search(query, num_results)
+    with st.spinner("Performing deep research..."):
+        research_results = deep_research(query, breadth=breadth, depth=depth)
         
-        if st.session_state.search_results:
-            # Analyze results
-            st.session_state.analysis = analyze_with_gemini(query, st.session_state.search_results)
+        st.session_state.search_results = research_results['visited_urls']
+        st.session_state.learnings = research_results['learnings']
+        
+        # Generate final analysis
+        st.session_state.analysis = analyze_with_gemini(
+            query, 
+            research_results['learnings'],
+            research_results['visited_urls']
+        )
 
 # Display results
 if st.session_state.search_results:
