@@ -288,7 +288,8 @@ def process_search_results(query: str, search_results: List[Dict], webpage_conte
         return {'learnings': [], 'followup_questions': []}
 
 def deep_research(query: str, breadth: int = 3, depth: int = 2, 
-                 learnings: List[str] = None, visited_urls: List[str] = None) -> Dict:
+                 learnings: List[str] = None, visited_urls: List[str] = None,
+                 all_results: List[Dict] = None) -> Dict:
     """
     Perform recursive deep research with breadth and depth
     """
@@ -296,10 +297,11 @@ def deep_research(query: str, breadth: int = 3, depth: int = 2,
         learnings = []
     if visited_urls is None:
         visited_urls = []
+    if all_results is None:
+        all_results = []
         
     search_queries = generate_search_queries(query, learnings, breadth)
     all_learnings = learnings.copy()
-    all_results = []  # Store full search results
     
     for search_query in search_queries:
         try:
@@ -324,10 +326,12 @@ def deep_research(query: str, breadth: int = 3, depth: int = 2,
                         breadth=max(2, breadth-1),
                         depth=depth-1,
                         learnings=all_learnings,
-                        visited_urls=visited_urls
+                        visited_urls=visited_urls,
+                        all_results=all_results  # Pass the results list to recursive calls
                     )
                     all_learnings.extend(deeper_results['learnings'])
                     visited_urls.extend(deeper_results['visited_urls'])
+                    # No need to extend all_results as it's passed by reference
                     
         except Exception as e:
             st.error(f"Error in research: {str(e)}")
@@ -336,7 +340,7 @@ def deep_research(query: str, breadth: int = 3, depth: int = 2,
     return {
         'learnings': list(set(all_learnings)),
         'visited_urls': list(set(visited_urls)),
-        'search_results': all_results  # Return full search results
+        'search_results': all_results
     }
 
 def generate_feedback(query: str, num_questions: int = 3) -> List[str]:
