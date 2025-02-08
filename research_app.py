@@ -118,17 +118,24 @@ def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
     """
     Analyze search results using Gemini 2.0 Flash Thinking
     """
-    chat = model.start_chat(history=[])
-    
-    # Scrape webpage contents
+    # Scrape webpage contents from provided sources
     urls = [result['url'] for result in search_results]
     webpage_contents = scrape_urls_parallel(urls)
     
+    current_time = datetime.now().isoformat()
     prompt = f"""
+    You are an expert researcher. Today is {current_time}. Follow these instructions when responding:
+    - You may be asked to research subjects that are post your knowledge cutoff; assume the user is right when new information is presented.
+    - The user is a highly experienced analyst, so be as detailed and accurate as possible.
+    - Be highly organized, proactive, and anticipate further needs.
+    - Suggest solutions or insights that might not have been considered.
+    - Provide detailed explanations and analysis.
+    - Value good arguments over mere authority; however, reference the provided sources explicitly using inline citations (e.g., [Source 1]).
+    - Consider new technologies and contrarian ideas, and clearly flag any high levels of speculation.
+    
     Research Query: {query}
     
-    Based on the following search results and their contents, provide a comprehensive analysis:
-    
+    Below are the sources and their content summaries:
     {'-' * 50}
     """
     
@@ -151,18 +158,18 @@ def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
     {'-' * 50}
     
     Please provide:
-    1. A comprehensive summary of the findings, incorporating details from the full webpage contents
-    2. Key insights and patterns across sources
-    3. Different perspectives or conflicting information found in the articles
-    4. Potential gaps in the research
-    5. Recommendations for further investigation
+    1. A comprehensive summary of key findings and insights, explicitly citing sources inline (e.g., [Source 1]).
+    2. A detailed breakdown of evidence with clear reference to the provided sources.
+    3. Identification of conflicting perspectives or gaps in the research.
+    4. Proactive recommendations for further investigation and potential new lines of inquiry.
+    5. Clearly label any speculative observations.
     
-    Format your response in clear sections with markdown formatting.
+    Format your response in clear markdown sections.
     """
     
     # Add progress indicator
     with st.spinner("Analyzing webpage contents..."):
-        response = chat.send_message(prompt)
+        response = model.send_message(prompt)
         return response.text
 
 # Streamlit UI
