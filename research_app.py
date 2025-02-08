@@ -301,13 +301,14 @@ def deep_research(query: str, breadth: int = 3, depth: int = 2,
         
     search_queries = generate_search_queries(query, learnings, breadth)
     all_learnings = learnings.copy()
-    all_urls = visited_urls.copy()
+    all_results = []  # Store full search results
     
     for search_query in search_queries:
         try:
             results = brave_search(search_query['query'])
+            all_results.extend(results)  # Store complete results
             new_urls = [r['url'] for r in results]
-            webpage_contents = scrape_urls_parallel([url for url in new_urls if url not in all_urls])
+            webpage_contents = scrape_urls_parallel([url for url in new_urls if url not in visited_urls])
             
             processed_results = process_search_results(
                 search_query['query'], 
@@ -316,7 +317,7 @@ def deep_research(query: str, breadth: int = 3, depth: int = 2,
             )
             
             all_learnings.extend(processed_results['learnings'])
-            all_urls.extend(new_urls)
+            visited_urls.extend(new_urls)
             
             if depth > 1:
                 for followup in processed_results['followup_questions']:
@@ -325,10 +326,10 @@ def deep_research(query: str, breadth: int = 3, depth: int = 2,
                         breadth=max(2, breadth-1),
                         depth=depth-1,
                         learnings=all_learnings,
-                        visited_urls=all_urls
+                        visited_urls=visited_urls
                     )
                     all_learnings.extend(deeper_results['learnings'])
-                    all_urls.extend(deeper_results['visited_urls'])
+                    visited_urls.extend(deeper_results['visited_urls'])
                     
         except Exception as e:
             st.error(f"Error in research: {str(e)}")
@@ -336,7 +337,8 @@ def deep_research(query: str, breadth: int = 3, depth: int = 2,
     
     return {
         'learnings': list(set(all_learnings)),
-        'visited_urls': list(set(all_urls))
+        'visited_urls': list(set(visited_urls)),
+        'search_results': all_results  # Return full search results
     }
 
 def generate_feedback(query: str, num_questions: int = 3) -> List[str]:
@@ -396,14 +398,13 @@ if submitted and query:
     with st.spinner("Performing deep research..."):
         research_results = deep_research(query, breadth=breadth, depth=depth)
         
-        st.session_state.search_results = research_results['visited_urls']
+        st.session_state.search_results = research_results['search_results']  # Store full results
         st.session_state.learnings = research_results['learnings']
         
-        # Generate final analysis
+        # Generate final analysis with full search results
         st.session_state.analysis = analyze_with_gemini(
             query, 
-            research_results['learnings'],
-            research_results['visited_urls']
+            st.session_state.search_results
         )
 
 # Display results
@@ -411,12 +412,11 @@ if st.session_state.search_results:
     col1, col2 = st.columns([1, 1])
     
     with col1:
-        st.subheader("📚 Sources")
-        for idx, url in enumerate(st.session_state.search_results, 1):
-            parsed_url = urlparse(url)
-            domain = parsed_url.netloc
-            with st.expander(f"{idx}. {domain}"):
-                st.markdown(f"[View source]({url})")
+        st.subheader("📚 Search Results")
+        for idx, result in enumerate(st.session_state.search_results, 1):
+            with st.expander(f"{idx}. {result.get('title', 'No title')}"):
+                st.write(result.get('description', 'No description available'))
+                st.markdown(f"[Read more]({result['url']})")
     
     with col2:
         st.subheader("🤖 AI Analysis")
@@ -436,7 +436,7 @@ Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 ## Sources
 """
     for idx, result in enumerate(st.session_state.search_results, 1):
-        export_content += f"\n{idx}. [{result['title']}]({result['url']})"
+        export_content += f"\n{idx}. [{result.get('title', 'No title')}]({result['url']})"
 
     st.download_button(
         label="📥 Export Report",
