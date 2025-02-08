@@ -114,15 +114,11 @@ def scrape_urls_parallel(urls: List[str]) -> Dict[str, str]:
     
     return results
 
-def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
+def analyze_with_gemini(query: str, learnings: List[str], visited_urls: List[str]) -> str:
     """
-    Analyze search results using Gemini 2.0 Flash Thinking with enhanced expert analysis
+    Analyze research results using Gemini 2.0 Flash Thinking with enhanced expert analysis
     """
     chat = model.start_chat(history=[])
-    
-    # Scrape webpage contents
-    urls = [result['url'] for result in search_results]
-    webpage_contents = scrape_urls_parallel(urls)
     
     current_time = datetime.now().isoformat()
     
@@ -141,26 +137,21 @@ def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
     
     Research Query: {query}
     
-    Analyze the following search results and their full contents comprehensively:
-    
+    Key Learnings from Research:
     {'-' * 50}
     """
     
-    for idx, result in enumerate(search_results, 1):
-        url = result['url']
-        content = webpage_contents.get(url, "Content not available")
-        
-        prompt += f"""
-        Source {idx}:
-        Title: {result['title']}
-        URL: {url}
-        Description: {result['description']}
-        
-        Full Content Analysis:
-        {content[:2000]}
-        
-        {'-' * 30}
-        """
+    for idx, learning in enumerate(learnings, 1):
+        prompt += f"\n{idx}. {learning}"
+    
+    prompt += f"""
+    
+    Sources Analyzed:
+    {'-' * 50}
+    """
+    
+    for idx, url in enumerate(visited_urls, 1):
+        prompt += f"\n{idx}. {url}"
     
     prompt += f"""
     {'-' * 50}
@@ -208,7 +199,7 @@ def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
     """
     
     # Add progress indicator
-    with st.spinner("Performing expert analysis of source materials..."):
+    with st.spinner("Performing expert analysis of research findings..."):
         response = chat.send_message(prompt)
         return response.text
 
