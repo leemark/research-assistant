@@ -126,7 +126,9 @@ def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
     
     current_time = datetime.now().isoformat()
     prompt = f"""
-    You are an expert researcher. Today is {current_time}. Follow these instructions when responding:
+    You are an expert researcher. Today is {current_time}. Please generate a comprehensive yet accessible research report based on the following instructions and sources.
+
+    INSTRUCTIONS:
     - You may be asked to research subjects that are post your knowledge cutoff; assume the user is right when new information is presented.
     - The user is a highly experienced analyst, so be as detailed and accurate as possible.
     - Be highly organized, proactive, and anticipate further needs.
@@ -134,9 +136,21 @@ def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
     - Provide detailed explanations and analysis.
     - Value good arguments over mere authority; however, reference the provided sources explicitly using inline citations (e.g., [Source 1]).
     - Consider new technologies and contrarian ideas, and clearly flag any high levels of speculation.
-    
+
+    --------------------------------------------------
+    Executive Summary:
+    - Provide 3-5 bullet points summarizing the key findings and recommendations.
+    - Ensure that the summary captures what the report deems most critical.
+    --------------------------------------------------
+
+    Following the Executive Summary, provide a detailed analysis that includes:
+    1. A robust breakdown of evidence with source citations.
+    2. Identification of conflicting perspectives or gaps in the research.
+    3. Proactive recommendations for further investigation.
+    4. Clearly flag any speculative observations.
+
     Research Query: {query}
-    
+
     Below are the sources and their content summaries:
     {'-' * 50}
     """
