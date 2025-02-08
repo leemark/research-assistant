@@ -358,6 +358,32 @@ def to_headline_case(text: str) -> str:
             
     return ' '.join(result)
 
+def generate_research_title(query: str) -> str:
+    """
+    Generate a concise, professional research title from the query.
+    Uses Gemini to create an appropriate academic-style title.
+    """
+    prompt = f"""
+    Create a concise, professional research title from this query. The title should:
+    - Be clear and academic in style
+    - Not exceed 12 words
+    - Capture the main research focus
+    - Not use unnecessary words like "Research on" or "Investigation of"
+    - Use proper title case
+    
+    Query: {query}
+    
+    Provide only the title with no additional text or punctuation.
+    """
+    
+    try:
+        response = model.generate_content(prompt)
+        title = response.text.strip()
+        return title
+    except Exception as e:
+        # Fallback to a simpler title if generation fails
+        return f"Analysis of {query[:100]}"
+
 def write_final_report(refined_query: str, analyses: List[Tuple[str, str]], search_results: List[Dict], initial_report: str) -> str:
     """
     Generate a final combined research report using the initial analysis as context.
@@ -374,12 +400,15 @@ def write_final_report(refined_query: str, analyses: List[Tuple[str, str]], sear
     """
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
+    # Generate a better title
+    title = generate_research_title(refined_query)
+    
     # Build the final report prompt
     prompt = f"""
     Using the initial report context provided below, draft a final combined research report with the following structure.
-    IMPORTANT: The title and timestamp must be included exactly as shown below, maintaining the exact formatting:
+    IMPORTANT: The title and "Generated on:" timestamp must be included exactly as shown below, maintaining the exact formatting:
 
-    # Deep Research on {refined_query}
+    # {title}
     *Generated on: {current_time}*
 
     ## Table of Contents
