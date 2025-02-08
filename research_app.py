@@ -172,6 +172,27 @@ def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
         response = chat.send_message(prompt)
         return response.text
 
+def refine_research_query(original_query: str) -> str:
+    """
+    Refine the research query into a comprehensive and detailed research query.
+    """
+    prompt = f"""
+    You are an expert researcher. Refine the following research question to be a comprehensive research query for further investigation.
+    
+    Original Research Question: "{original_query}"
+    
+    The refined query should:
+    - Clarify any vague terms or ambiguities.
+    - Expand on the context and include potential angles of inquiry.
+    - Break down the question into specific research components if applicable.
+    - Provide clear research goals.
+    
+    Provide only the refined query in your response.
+    """
+    response = model.generate_content(prompt)
+    refined_query = response.text.strip()
+    return refined_query
+
 # Streamlit UI
 st.title("🔍 Deep Research Assistant")
 st.markdown("Powered by Brave Search and Google Gemini")
@@ -183,13 +204,15 @@ with st.form("research_form"):
     submitted = st.form_submit_button("Start Research")
 
 if submitted and query:
+    with st.spinner("Refining research query..."):
+         refined_query = refine_research_query(query)
+    st.markdown(f"**Refined Research Query:** {refined_query}")
     with st.spinner("Searching and analyzing..."):
-        # Perform search
-        st.session_state.search_results = brave_search(query, num_results)
+         # Use the refined query for search and analysis
+         st.session_state.search_results = brave_search(refined_query, num_results)
         
-        if st.session_state.search_results:
-            # Analyze results
-            st.session_state.analysis = analyze_with_gemini(query, st.session_state.search_results)
+         if st.session_state.search_results:
+             st.session_state.analysis = analyze_with_gemini(refined_query, st.session_state.search_results)
 
 # Display results
 if st.session_state.search_results:
