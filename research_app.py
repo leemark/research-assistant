@@ -43,9 +43,9 @@ model = genai.GenerativeModel(
     generation_config=generation_config,
 )
 
-def brave_search(query: str, num_results: int = 10) -> List[Dict]:
+def brave_search(query: str, num_results: int = 10, max_retries: int = 3) -> List[Dict]:
     """
-    Perform a search using Brave Search API
+    Perform a search using Brave Search API with retry and backoff in case of rate limiting.
     """
     headers = {
         "X-Subscription-Token": BRAVE_API_KEY,
@@ -58,13 +58,18 @@ def brave_search(query: str, num_results: int = 10) -> List[Dict]:
         "count": num_results
     }
     
-    response = requests.get(url, headers=headers, params=params)
-    if response.status_code == 200:
-        results = response.json().get('web', {}).get('results', [])
-        return results
-    else:
-        st.error(f"Search API Error: {response.status_code}")
-        return []
+    for attempt in range(max_retries):
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            results = response.json().get('web', {}).get('results', [])
+            return results
+        elif response.status_code == 429:
+            st.warning("Rate limited by Brave Search API (429). Retrying...")
+            time.sleep(2 * (attempt + 1))
+        else:
+            st.error(f"Search API Error: {response.status_code}")
+            break
+    return []
 
 def scrape_webpage(url: str) -> str:
     """
@@ -249,6 +254,7 @@ if submitted and query:
          for q in web_search_queries:
               results = brave_search(q, 5)
               all_results.extend(results)
+              time.sleep(1)  # Delay between API requests to avoid rate limiting
          st.session_state.search_results = all_results
         
          if st.session_state.search_results:
