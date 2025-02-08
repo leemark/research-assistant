@@ -8,6 +8,8 @@ from bs4 import BeautifulSoup
 import concurrent.futures
 import time
 from urllib.parse import urlparse
+import json
+import pathlib
 
 # Configure page settings
 st.set_page_config(
@@ -16,20 +18,115 @@ st.set_page_config(
     layout="wide"
 )
 
-# Initialize session state
+# Initialize session state for API keys
+if 'api_keys_initialized' not in st.session_state:
+    st.session_state.api_keys_initialized = False
+
+# Function to load cached API keys
+def load_cached_api_keys():
+    try:
+        cache_file = pathlib.Path('.streamlit/api_keys.json')
+        if cache_file.exists():
+            with open(cache_file, 'r') as f:
+                return json.load(f)
+    except Exception:
+        return None
+    return None
+
+# Function to save API keys to cache
+def save_api_keys_to_cache(brave_key: str, google_key: str):
+    try:
+        cache_dir = pathlib.Path('.streamlit')
+        cache_dir.mkdir(exist_ok=True)
+        cache_file = cache_dir / 'api_keys.json'
+        with open(cache_file, 'w') as f:
+            json.dump({
+                'BRAVE_API_KEY': brave_key,
+                'GOOGLE_API_KEY': google_key
+            }, f)
+    except Exception as e:
+        st.error(f"Failed to cache API keys: {str(e)}")
+
+# Load cached API keys if available
+cached_keys = load_cached_api_keys()
+
+# API Key Input Section
+if not st.session_state.api_keys_initialized:
+    st.title("🔑 API Key Setup")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        brave_key = st.text_input(
+            "Enter your Brave API Key",
+            value=cached_keys.get('BRAVE_API_KEY', '') if cached_keys else '',
+            type="password"
+        )
+        st.markdown("[Get Brave API Key](https://api.search.brave.com/app/keys)")
+    
+    with col2:
+        google_key = st.text_input(
+            "Enter your Google API Key",
+            value=cached_keys.get('GOOGLE_API_KEY', '') if cached_keys else '',
+            type="password"
+        )
+        st.markdown("[Get Google API Key](https://makersuite.google.com/app/apikey)")
+    
+    save_keys = st.checkbox("Save API keys locally (they will be cached for future sessions)", value=True)
+    
+    if st.button("Submit API Keys"):
+        if not brave_key or not google_key:
+            st.error("Please enter both API keys")
+        else:
+            # Test the API keys before proceeding
+            try:
+                # Test Brave API
+                headers = {
+                    "X-Subscription-Token": brave_key,
+                    "Accept": "application/json",
+                }
+                brave_response = requests.get(
+                    "https://api.search.brave.com/res/v1/web/search",
+                    headers=headers,
+                    params={"q": "test"}
+                )
+                brave_response.raise_for_status()
+                
+                # Test Google API
+                genai.configure(api_key=google_key)
+                model = genai.GenerativeModel('gemini-pro')
+                model.generate_content("test")
+                
+                # If both tests pass, save the keys
+                if save_keys:
+                    save_api_keys_to_cache(brave_key, google_key)
+                
+                # Store in session state
+                st.session_state.BRAVE_API_KEY = brave_key
+                st.session_state.GOOGLE_API_KEY = google_key
+                st.session_state.api_keys_initialized = True
+                st.success("API keys validated successfully!")
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"Error validating API keys: {str(e)}")
+    
+    st.stop()  # Don't show the rest of the app until API keys are set
+
+# Configure API keys from session state
+BRAVE_API_KEY = st.session_state.BRAVE_API_KEY
+GOOGLE_API_KEY = st.session_state.GOOGLE_API_KEY
+
+# Configure Gemini
+genai.configure(api_key=GOOGLE_API_KEY)
+
+# Initialize other session state variables
 if 'search_results' not in st.session_state:
     st.session_state.search_results = []
 if 'analysis' not in st.session_state:
     st.session_state.analysis = ""
 if 'refined_query' not in st.session_state:
     st.session_state.refined_query = ""
-
-# Configure API keys
-BRAVE_API_KEY = st.secrets["BRAVE_API_KEY"]
-GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
-
-# Configure Gemini
-genai.configure(api_key=GOOGLE_API_KEY)
 
 # Updated Gemini model configuration
 generation_config = {
