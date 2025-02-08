@@ -253,8 +253,8 @@ def write_final_report(refined_query: str, analyses: List[Tuple[str, str]], sear
     The final report should include:
     - Title of Paper
     - Generated on: <timestamp>
-    - Abstract
     - Table of Contents
+    - Abstract
     - Research Questions
     - Executive Summary (combined across all analyses)
     - Analyses 1-5
@@ -269,19 +269,20 @@ def write_final_report(refined_query: str, analyses: List[Tuple[str, str]], sear
     [Your Title Here, e.g., "Deep Research on {refined_query}"]
     Generated on: {current_time}
 
-    Abstract:
-    Provide a brief summary of the entire research report.
-
     ## Table of Contents
-    1. [Abstract](#abstract)
-    2. [Research Question(s)](#research-questions)
-    3. [Executive Summary](#executive-summary)
-    4. [Title of Analysis 1](#title-of-analysis-1)
-    5. [Title of Analysis 2](#title-of-analysis-2)
-    6. [Title of Analysis 3](#title-of-analysis-3)
-    7. [Title of Analysis 4](#title-of-analysis-4)
-    8. [Title of Analysis 5](#title-of-analysis-5)
-    9. [Sources Analyzed](#sources-analyzed)
+    1. [Table of Contents](#table-of-contents)
+    2. [Abstract](#abstract)
+    3. [Research Questions](#research-questions)
+    4. [Executive Summary](#executive-summary)
+    5. [Title of Analysis 1](#title-of-analysis-1)
+    6. [Title of Analysis 2](#title-of-analysis-2)
+    7. [Title of Analysis 3](#title-of-analysis-3)
+    8. [Title of Analysis 4](#title-of-analysis-4)
+    9. [Title of Analysis 5](#title-of-analysis-5)
+    10. [Sources Analyzed](#sources-analyzed)
+
+    ## Abstract
+    Provide a brief summary of the entire research report.
 
     ## Research Questions
     {refined_query}
@@ -317,13 +318,17 @@ with st.form("research_form"):
     submitted = st.form_submit_button("Start Research")
 
 if submitted and query:
-    with st.spinner("Refining research query..."):
-        refined_query = refine_research_query(query)
-    st.session_state.refined_query = refined_query  # Store in session state
-    st.markdown(f"**Refined Research Query:** {refined_query}")
+    # Create a container for initial outputs that we'll clear later
+    initial_output_container = st.empty()
+    
+    with initial_output_container:
+        with st.spinner("Refining research query..."):
+            refined_query = refine_research_query(query)
+        st.session_state.refined_query = refined_query  # Store in session state
+        st.markdown(f"**Refined Research Query:** {refined_query}")
 
-    with st.spinner("Generating search queries..."):
-         web_search_queries = simplify_search_query(refined_query)
+        with st.spinner("Generating search queries..."):
+             web_search_queries = simplify_search_query(refined_query)
     
     all_search_results = []
     all_analyses = []
@@ -346,8 +351,6 @@ if submitted and query:
     # Generate final report automatically
     initial_report = ""
     for idx, (search_query, analysis) in enumerate(st.session_state.analyses, 1):
-        # Extract the main title from the analysis content
-        # Look for a line starting with "Research Report:" or similar and use that as the section title
         analysis_lines = analysis.split('\n')
         title = None
         for line in analysis_lines:
@@ -356,7 +359,6 @@ if submitted and query:
                 break
         
         if not title:
-            # Fallback to using the search query as title, converted to headline case
             title = to_headline_case(search_query)
             
         initial_report += f"## {title}\n{analysis}\n\n"
@@ -368,7 +370,7 @@ if submitted and query:
         initial_report=initial_report
     )
     
-    # Clean up the report by removing unwanted markdown markers
+    # Clean up the report
     final_report = final_report.replace("```markdown", "").replace("```", "").strip()
     
     # Store final report in session state
@@ -377,9 +379,12 @@ if submitted and query:
     # Generate timestamp for the file name
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     st.session_state.export_filename = f"research_report_{timestamp}.md"
+    
+    # Clear the initial output container once we have the final report
+    initial_output_container.empty()
 
 # Display results if available
-if hasattr(st.session_state, 'analyses') and st.session_state.analyses:
+if hasattr(st.session_state, 'final_report'):
     # Display download button in a small container at the top
     st.container().download_button(
         label="📥 Export Final Report",
