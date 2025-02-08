@@ -393,16 +393,6 @@ def generate_research_title(query: str) -> str:
 def write_final_report(refined_query: str, analyses: List[Tuple[str, str]], search_results: List[Dict], initial_report: str) -> str:
     """
     Generate a final combined research report using the initial analysis as context.
-    
-    The final report should include:
-    - Title of Paper
-    - Generated on: <timestamp>
-    - Table of Contents
-    - Abstract
-    - Research Questions
-    - Executive Summary (combined across all analyses)
-    - Analyses 1-5
-    - Sources
     """
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
@@ -411,8 +401,14 @@ def write_final_report(refined_query: str, analyses: List[Tuple[str, str]], sear
     
     # Build the final report prompt
     prompt = f"""
-    Using the initial report context provided below, draft a final combined research report with the following structure.
-    IMPORTANT: The title and "Generated on:" timestamp must be included exactly as shown below, maintaining the exact formatting:
+    You are an expert research writer. Draft a comprehensive research report that focuses on the subject matter rather than the research process.
+    IMPORTANT: Follow these guidelines:
+    1. Focus on the research topic and findings, NOT on how the research was conducted
+    2. Do not mention the tool, iterations, or AI unless they are specifically part of the research topic
+    3. Use meaningful section titles that reflect the actual content
+    4. Maintain academic tone and style
+    5. Include specific examples and evidence
+    6. The title and timestamp must be formatted exactly as shown below:
 
     # {title}
     *Generated on: {current_time}*
@@ -421,28 +417,41 @@ def write_final_report(refined_query: str, analyses: List[Tuple[str, str]], sear
     1. [Abstract](#abstract)
     2. [Research Questions](#research-questions)
     3. [Executive Summary](#executive-summary)
-    4. [Title of Analysis 1](#title-of-analysis-1)
-    5. [Title of Analysis 2](#title-of-analysis-2)
-    6. [Title of Analysis 3](#title-of-analysis-3)
-    7. [Title of Analysis 4](#title-of-analysis-4)
-    8. [Title of Analysis 5](#title-of-analysis-5)
-    9. [Sources Analyzed](#sources-analyzed)
+    4. [Key Findings and Analysis](#key-findings-and-analysis)
+    5. [Implications and Applications](#implications-and-applications)
+    6. [Challenges and Limitations](#challenges-and-limitations)
+    7. [Future Directions](#future-directions)
+    8. [Sources Analyzed](#sources-analyzed)
 
     ## Abstract
-    Provide a brief summary of the entire research report.
+    Provide a concise summary of the key findings and implications, focusing on the research topic itself.
 
     ## Research Questions
     {refined_query}
 
     ## Executive Summary
-    Produce one combined executive summary for the entire report using 5-8 bullet points or 3-4 paragraphs.
-    Ensure that it captures the most critical findings and recommendations across all analyses.
+    Produce a focused executive summary using 5-8 bullet points that capture the most important findings and implications.
+    Do not discuss the research process unless it's specifically part of the research topic.
 
-    ## Analyses
-    {initial_report}
+    ## Key Findings and Analysis
+    Present the main findings and analysis, organized by major themes or topics.
+    Focus on the subject matter and evidence rather than how the information was gathered.
+
+    ## Implications and Applications
+    Discuss the practical and theoretical implications of the findings.
+    Include specific examples and potential applications.
+
+    ## Challenges and Limitations
+    Address key challenges, limitations, and areas of uncertainty in the subject matter.
+    Focus on limitations in the field/topic being researched, not limitations of the research process.
+
+    ## Future Directions
+    Outline promising areas for future research and development in this field.
+    Focus on advancing the subject matter rather than improving research methodology.
 
     ## Sources Analyzed
     """
+    
     # Append the sources list
     for idx, result in enumerate(search_results, 1):
          prompt += f"\n{idx}. [{result['title']}]({result['url']})"
@@ -530,45 +539,82 @@ def update_knowledge_graph(current_findings: str, knowledge_graph: Dict) -> Dict
     The knowledge graph tracks key concepts, their relationships, and confidence levels.
     """
     prompt = f"""
-    Analyze the current findings and update the knowledge graph. Focus on:
-    1. New concepts/entities discovered
-    2. New relationships between existing concepts
-    3. Updated confidence levels for existing information
-    4. Conflicting information that needs resolution
-
+    You are a precise JSON generator. Analyze these findings and update the knowledge graph.
+    
     Current Findings:
     {current_findings}
 
     Existing Knowledge Graph:
     {json.dumps(knowledge_graph, indent=2)}
 
-    Return a JSON object representing the updated knowledge graph with the following structure:
+    IMPORTANT: You must return a valid JSON object with exactly this structure:
     {{
         "concepts": {{
             "concept_name": {{
-                "confidence": float,  # 0.0 to 1.0
-                "related_concepts": [str],
-                "supporting_evidence": [str],
-                "conflicting_evidence": [str]
+                "confidence": 0.95,
+                "related_concepts": ["concept1", "concept2"],
+                "supporting_evidence": ["evidence1", "evidence2"],
+                "conflicting_evidence": ["conflict1", "conflict2"]
             }}
         }},
         "relationships": [
             {{
-                "source": str,
-                "target": str,
-                "type": str,
-                "confidence": float
+                "source": "concept1",
+                "target": "concept2",
+                "type": "relates_to",
+                "confidence": 0.8
             }}
         ]
     }}
+
+    Rules:
+    1. All confidence values must be between 0.0 and 1.0
+    2. All strings must be properly escaped
+    3. Arrays must contain at least one item
+    4. Concept names must be unique
+    5. Return ONLY the JSON object, no other text
     """
     
-    response = model.generate_content(prompt)
     try:
-        updated_graph = json.loads(response.text)
-        return updated_graph
-    except json.JSONDecodeError:
-        st.warning("Failed to update knowledge graph. Continuing with existing graph.")
+        response = model.generate_content(prompt)
+        response_text = response.text.strip()
+        
+        # Try to find JSON content if there's any surrounding text
+        try:
+            start_idx = response_text.index('{')
+            end_idx = response_text.rindex('}') + 1
+            json_str = response_text[start_idx:end_idx]
+        except ValueError:
+            st.warning("Failed to extract JSON from response. Using existing graph.")
+            return knowledge_graph
+            
+        try:
+            updated_graph = json.loads(json_str)
+            
+            # Validate the structure
+            if not all(key in updated_graph for key in ['concepts', 'relationships']):
+                st.warning("Invalid graph structure. Using existing graph.")
+                return knowledge_graph
+                
+            # Validate confidence values
+            for concept in updated_graph['concepts'].values():
+                if not 0 <= concept['confidence'] <= 1:
+                    st.warning("Invalid confidence values. Using existing graph.")
+                    return knowledge_graph
+                    
+            for rel in updated_graph['relationships']:
+                if not 0 <= rel['confidence'] <= 1:
+                    st.warning("Invalid confidence values. Using existing graph.")
+                    return knowledge_graph
+                    
+            return updated_graph
+            
+        except json.JSONDecodeError as e:
+            st.warning(f"Failed to parse knowledge graph JSON: {str(e)}")
+            return knowledge_graph
+            
+    except Exception as e:
+        st.warning(f"Error updating knowledge graph: {str(e)}")
         return knowledge_graph
 
 def determine_next_iteration(knowledge_gaps: List[str], knowledge_graph: Dict) -> Tuple[bool, str]:
