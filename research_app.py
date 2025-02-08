@@ -122,6 +122,9 @@ def analyze_with_gemini(query: str, learnings: List[str], visited_urls: List[str
     
     current_time = datetime.now().isoformat()
     
+    # First, let's scrape all URLs
+    webpage_contents = scrape_urls_parallel(visited_urls)
+    
     prompt = f"""
     You are an expert researcher and analyst. Today is {current_time}. 
     
@@ -146,12 +149,18 @@ def analyze_with_gemini(query: str, learnings: List[str], visited_urls: List[str
     
     prompt += f"""
     
-    Sources Analyzed:
+    Sources and Their Content:
     {'-' * 50}
     """
     
     for idx, url in enumerate(visited_urls, 1):
-        prompt += f"\n{idx}. {url}"
+        content = webpage_contents.get(url, "Content not available")
+        prompt += f"""
+        Source {idx}: {url}
+        Content: {content[:5000]}  # Limiting content length to avoid token limits
+        
+        {'-' * 30}
+        """
     
     prompt += f"""
     {'-' * 50}
@@ -402,11 +411,12 @@ if st.session_state.search_results:
     col1, col2 = st.columns([1, 1])
     
     with col1:
-        st.subheader("📚 Search Results")
-        for idx, result in enumerate(st.session_state.search_results, 1):
-            with st.expander(f"{idx}. {result['title']}"):
-                st.write(result['description'])
-                st.markdown(f"[Read more]({result['url']})")
+        st.subheader("📚 Sources")
+        for idx, url in enumerate(st.session_state.search_results, 1):
+            parsed_url = urlparse(url)
+            domain = parsed_url.netloc
+            with st.expander(f"{idx}. {domain}"):
+                st.markdown(f"[View source]({url})")
     
     with col2:
         st.subheader("🤖 AI Analysis")
