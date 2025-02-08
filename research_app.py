@@ -120,11 +120,11 @@ def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
     """
     chat = model.start_chat(history=[])
     
-    current_time = datetime.now().isoformat()
-    
-    # First, let's scrape all URLs
+    # Scrape webpage contents
     urls = [result['url'] for result in search_results]
     webpage_contents = scrape_urls_parallel(urls)
+    
+    current_time = datetime.now().isoformat()
     
     prompt = f"""
     You are an expert researcher and analyst. Today is {current_time}. 
@@ -141,21 +141,23 @@ def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
     
     Research Query: {query}
     
-    Sources and Their Content:
+    Analyze the following search results and their full contents comprehensively:
+    
     {'-' * 50}
     """
     
     for idx, result in enumerate(search_results, 1):
         url = result['url']
         content = webpage_contents.get(url, "Content not available")
+        
         prompt += f"""
         Source {idx}:
-        Title: {result.get('title', 'No title')}
+        Title: {result['title']}
         URL: {url}
-        Description: {result.get('description', 'No description')}
+        Description: {result['description']}
         
-        Full Content:
-        {content[:5000]}  # Limiting content length to avoid token limits
+        Full Content Analysis:
+        {content[:2000]}
         
         {'-' * 30}
         """
@@ -169,39 +171,37 @@ def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
     - Synthesize key discoveries from all sources
     - Identify critical patterns and relationships
     - Highlight unexpected or notable findings
-
+    
     2. Technical Analysis
     - Detailed examination of methodologies used
     - Evaluation of data quality and reliability
     - Technical limitations or constraints identified
-
+    
     3. Competing Perspectives
     - Compare and contrast different viewpoints
     - Analyze conflicts in methodology or conclusions
     - Evaluate strength of supporting evidence
-
+    
     4. Critical Gaps
     - Identify missing information or unexplored areas
     - Point out potential biases or limitations
     - Flag areas needing additional verification
-
+    
     5. Strategic Implications
     - Long-term consequences and impacts
     - Potential future developments
     - Strategic recommendations
-
+    
     6. Expert Recommendations
     - Specific actions based on findings
     - Priority areas for further investigation
     - Alternative approaches to consider
-
+    
     7. Speculative Analysis
     - [SPECULATIVE] Clearly marked predictions or forecasts
     - Potential emerging trends
     - Alternative scenarios to consider
-
-    **Important:** In your analysis, please include inline citations referencing the provided sources (e.g., [Source 1]). Ensure that each key point is explicitly supported by evidence from at least one of the sources above. If you reference general expertise beyond these sources, clearly indicate so.
-
+    
     Format your response using clear markdown structure with detailed subsections.
     Prioritize accuracy and depth over brevity.
     Challenge assumptions and consider non-obvious implications.
@@ -290,8 +290,7 @@ def process_search_results(query: str, search_results: List[Dict], webpage_conte
         return {'learnings': [], 'followup_questions': []}
 
 def deep_research(query: str, breadth: int = 3, depth: int = 2, 
-                 learnings: List[str] = None, visited_urls: List[str] = None,
-                 all_results: List[Dict] = None) -> Dict:
+                 learnings: List[str] = None, visited_urls: List[str] = None) -> Dict:
     """
     Perform recursive deep research with breadth and depth
     """
@@ -299,18 +298,16 @@ def deep_research(query: str, breadth: int = 3, depth: int = 2,
         learnings = []
     if visited_urls is None:
         visited_urls = []
-    if all_results is None:
-        all_results = []
         
     search_queries = generate_search_queries(query, learnings, breadth)
     all_learnings = learnings.copy()
+    all_urls = visited_urls.copy()
     
     for search_query in search_queries:
         try:
             results = brave_search(search_query['query'])
-            all_results.extend(results)  # Store complete results
             new_urls = [r['url'] for r in results]
-            webpage_contents = scrape_urls_parallel([url for url in new_urls if url not in visited_urls])
+            webpage_contents = scrape_urls_parallel([url for url in new_urls if url not in all_urls])
             
             processed_results = process_search_results(
                 search_query['query'], 
@@ -319,7 +316,7 @@ def deep_research(query: str, breadth: int = 3, depth: int = 2,
             )
             
             all_learnings.extend(processed_results['learnings'])
-            visited_urls.extend(new_urls)
+            all_urls.extend(new_urls)
             
             if depth > 1:
                 for followup in processed_results['followup_questions']:
@@ -328,12 +325,10 @@ def deep_research(query: str, breadth: int = 3, depth: int = 2,
                         breadth=max(2, breadth-1),
                         depth=depth-1,
                         learnings=all_learnings,
-                        visited_urls=visited_urls,
-                        all_results=all_results  # Pass the results list to recursive calls
+                        visited_urls=all_urls
                     )
                     all_learnings.extend(deeper_results['learnings'])
-                    visited_urls.extend(deeper_results['visited_urls'])
-                    # No need to extend all_results as it's passed by reference
+                    all_urls.extend(deeper_results['visited_urls'])
                     
         except Exception as e:
             st.error(f"Error in research: {str(e)}")
@@ -341,8 +336,7 @@ def deep_research(query: str, breadth: int = 3, depth: int = 2,
     
     return {
         'learnings': list(set(all_learnings)),
-        'visited_urls': list(set(visited_urls)),
-        'search_results': all_results
+        'visited_urls': list(set(all_urls))
     }
 
 def generate_feedback(query: str, num_questions: int = 3) -> List[str]:
@@ -402,13 +396,14 @@ if submitted and query:
     with st.spinner("Performing deep research..."):
         research_results = deep_research(query, breadth=breadth, depth=depth)
         
-        st.session_state.search_results = research_results['search_results']  # Store full results
+        st.session_state.search_results = research_results['visited_urls']
         st.session_state.learnings = research_results['learnings']
         
-        # Generate final analysis with full search results
+        # Generate final analysis
         st.session_state.analysis = analyze_with_gemini(
             query, 
-            st.session_state.search_results
+            research_results['learnings'],
+            research_results['visited_urls']
         )
 
 # Display results
@@ -418,8 +413,8 @@ if st.session_state.search_results:
     with col1:
         st.subheader("📚 Search Results")
         for idx, result in enumerate(st.session_state.search_results, 1):
-            with st.expander(f"{idx}. {result.get('title', 'No title')}"):
-                st.write(result.get('description', 'No description available'))
+            with st.expander(f"{idx}. {result['title']}"):
+                st.write(result['description'])
                 st.markdown(f"[Read more]({result['url']})")
     
     with col2:
@@ -440,7 +435,7 @@ Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 ## Sources
 """
     for idx, result in enumerate(st.session_state.search_results, 1):
-        export_content += f"\n{idx}. [{result.get('title', 'No title')}]({result['url']})"
+        export_content += f"\n{idx}. [{result['title']}]({result['url']})"
 
     st.download_button(
         label="📥 Export Report",
