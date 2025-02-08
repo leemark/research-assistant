@@ -18,22 +18,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# Add introduction section
-st.title("🔍 Deep FREEsearch")
-st.markdown("""
-Welcome to Deep FREEsearch - your AI-powered research assistant! This tool helps you:
-- 🎯 Conduct comprehensive research on any topic
-- 🤖 Get AI-powered analysis of multiple sources
-- 📊 Generate detailed research reports automatically
-- 📥 Export findings in markdown format
-
-To get started, you'll need:
-1. A [Brave Search API key](https://api.search.brave.com/app/keys) (free tier available)
-2. A [Google API key](https://makersuite.google.com/app/apikey) for Gemini 2.0 Flash Thinking (free tier available)
-""")
-
-st.divider()
-
 # Initialize session state for API keys
 if 'api_keys_initialized' not in st.session_state:
     st.session_state.api_keys_initialized = False
@@ -68,7 +52,21 @@ cached_keys = load_cached_api_keys()
 
 # API Key Input Section
 if not st.session_state.api_keys_initialized:
+    st.title("🔍 Deep FREEsearch")
+    st.markdown("""
+    Welcome to Deep FREEsearch - your AI-powered research assistant! This tool helps you:
+    - 🎯 Conduct comprehensive research on any topic
+    - 🤖 Get AI-powered analysis of multiple sources
+    - 📊 Generate detailed research reports automatically
+    - 📥 Export findings in markdown format
 
+    To get started, you'll need:
+    1. A [Brave Search API key](https://api.search.brave.com/app/keys) (free tier available)
+    2. A [Google API key](https://makersuite.google.com/app/apikey) for Gemini 2.0 Flash Thinking (free tier available)
+    """)
+
+    st.divider()
+    
     st.title("🔑 API Key Setup")
     
     col1, col2 = st.columns(2)
@@ -424,7 +422,7 @@ def write_final_report(refined_query: str, analyses: List[Tuple[str, str]], sear
 
 # Streamlit UI
 st.title("🔍 Deep FREEsearch")
-st.markdown("Powered by Google Gemini 2.0 Flash Thinking and Brave Search")
+st.markdown("*Your AI-powered research assistant*")
 
 # Input section
 with st.form("research_form"):
