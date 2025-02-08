@@ -29,7 +29,7 @@ Welcome to Deep FREEsearch - your AI-powered research assistant! This tool helps
 
 To get started, you'll need:
 1. A [Brave Search API key](https://api.search.brave.com/app/keys) (free tier available)
-2. A [Google API key](https://makersuite.google.com/app/apikey) for Gemini Pro (free tier available)
+2. A [Google API key](https://makersuite.google.com/app/apikey) for Gemini 2.0 Flash Thinking (free tier available)
 """)
 
 st.divider()
