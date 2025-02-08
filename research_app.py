@@ -193,29 +193,30 @@ def refine_research_query(original_query: str) -> str:
     refined_query = response.text.strip()
     return refined_query
 
-def simplify_search_query(refined_query: str) -> str:
+def simplify_search_query(refined_query: str) -> List[str]:
     """
-    Convert the refined research query into a succinct web search query suitable for using as a search term.
+    Convert the refined research query into 5 different succinct web search queries suitable for using as search terms.
+    Returns a list of 5 different search queries.
     """
     prompt = f"""
-    Convert the following refined research query into a concise web search query that focuses on the most relevant keywords:
-    
+    Convert the following refined research query into 5 different concise web search queries that focus on different aspects or angles of the research topic. Make each query unique and focused on a different perspective or subtopic:
+
     {refined_query}
-    
-    Provide only the concise search query in your response.
+
+    Provide exactly 5 different search queries, one per line, with no additional text or formatting.
     """
     response = model.generate_content(prompt)
-    search_query = response.text.strip()
-    return search_query
+    search_queries = [q.strip() for q in response.text.strip().split('\n') if q.strip()]
+    return search_queries[:5]  # Ensure we return exactly 5 queries
 
 # Streamlit UI
 st.title("🔍 Deep Research Assistant")
-st.markdown("Powered by Brave Search and Google Gemini")
+st.markdown("Powered by Brave Search and Google Gemini 2.0 Flash Thinking")
 
 # Input section
 with st.form("research_form"):
     query = st.text_input("Enter your research query:", placeholder="What would you like to research?")
-    num_results = st.slider("Number of search results to analyze:", min_value=5, max_value=20, value=10)
+    num_results = st.slider("Number of search results to analyze per query:", min_value=5, max_value=20, value=10)
     submitted = st.form_submit_button("Start Research")
 
 if submitted and query:
@@ -223,20 +224,33 @@ if submitted and query:
          refined_query = refine_research_query(query)
     st.markdown(f"**Refined Research Query:** {refined_query}")
 
-    with st.spinner("Simplifying search query..."):
-         web_search_query = simplify_search_query(refined_query)
-    st.markdown(f"**Web Search Query:** {web_search_query}")
+    with st.spinner("Generating search queries..."):
+         web_search_queries = simplify_search_query(refined_query)
+    
+    st.markdown("**Generated Search Queries:**")
+    for i, search_query in enumerate(web_search_queries, 1):
+        st.markdown(f"{i}. {search_query}")
 
-    with st.spinner("Searching and analyzing..."):
-         # Use the simplified web search query for Brave Search API
-         st.session_state.search_results = brave_search(web_search_query, num_results)
-        
-         if st.session_state.search_results:
-             # Use the refined query for analysis to maintain depth and detail
-             st.session_state.analysis = analyze_with_gemini(refined_query, st.session_state.search_results)
+    all_search_results = []
+    all_analyses = []
+
+    for i, web_search_query in enumerate(web_search_queries, 1):
+        with st.spinner(f"Processing search query {i} of 5: {web_search_query}"):
+            # Search using current query
+            current_results = brave_search(web_search_query, num_results)
+            all_search_results.extend(current_results)
+            
+            if current_results:
+                # Analyze current results
+                current_analysis = analyze_with_gemini(f"{refined_query} (Search Query {i}: {web_search_query})", current_results)
+                all_analyses.append((web_search_query, current_analysis))
+
+    # Store results in session state
+    st.session_state.search_results = all_search_results
+    st.session_state.analyses = all_analyses
 
 # Display results
-if st.session_state.search_results:
+if hasattr(st.session_state, 'analyses') and st.session_state.analyses:
     col1, col2 = st.columns([1, 1])
     
     with col1:
@@ -248,21 +262,31 @@ if st.session_state.search_results:
     
     with col2:
         st.subheader("🤖 AI Analysis")
-        st.markdown(st.session_state.analysis)
+        for idx, (search_query, analysis) in enumerate(st.session_state.analyses, 1):
+            with st.expander(f"Analysis for Query {idx}: {search_query}"):
+                st.markdown(analysis)
 
 # Add export functionality
-if st.session_state.analysis:
+if hasattr(st.session_state, 'analyses') and st.session_state.analyses:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     export_filename = f"research_report_{timestamp}.md"
     
     export_content = f"""# Research Report: {query}
 Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
-## Analysis
-{st.session_state.analysis}
+## Refined Research Query
+{refined_query}
 
-## Sources
 """
+    
+    for idx, (search_query, analysis) in enumerate(st.session_state.analyses, 1):
+        export_content += f"""
+## Analysis {idx}: {search_query}
+{analysis}
+
+"""
+
+    export_content += "## Sources\n"
     for idx, result in enumerate(st.session_state.search_results, 1):
         export_content += f"\n{idx}. [{result['title']}]({result['url']})"
 
