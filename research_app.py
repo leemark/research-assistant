@@ -344,33 +344,31 @@ if hasattr(st.session_state, 'analyses') and st.session_state.analyses:
             with st.expander(f"Analysis for Query {idx}: {search_query}"):
                 st.markdown(analysis)
 
-# Add export functionality
-if hasattr(st.session_state, 'analyses') and st.session_state.analyses:
+# New button to generate the combined final report and make it available for download
+if st.button("Generate Final Report"):
+    # Combine all analyses into a single string; adjust formatting as needed.
+    initial_report = ""
+    for idx, (search_query, analysis) in enumerate(st.session_state.analyses, 1):
+        initial_report += f"### Analysis {idx}: {search_query}\n{analysis}\n\n"
+
+    final_report = write_final_report(
+        refined_query=st.session_state.refined_query,
+        analyses=st.session_state.analyses,
+        search_results=st.session_state.search_results,
+        initial_report=initial_report
+    )
+    
+    # Display the final report in the Streamlit app
+    st.markdown(final_report)
+    
+    # Generate a timestamp for the file name
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     export_filename = f"research_report_{timestamp}.md"
     
-    export_content = f"""# Research Report: {query}
-Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-
-## Refined Research Query
-{st.session_state.refined_query}
-
-"""
-    
-    for idx, (search_query, analysis) in enumerate(st.session_state.analyses, 1):
-        export_content += f"""
-## Analysis {idx}: {search_query}
-{analysis}
-
-"""
-
-    export_content += "## Sources\n"
-    for idx, result in enumerate(st.session_state.search_results, 1):
-        export_content += f"\n{idx}. [{result['title']}]({result['url']})"
-
+    # Provide a download button for the final report
     st.download_button(
-        label="📥 Export Report",
-        data=export_content,
+        label="📥 Export Final Report",
+        data=final_report,
         file_name=export_filename,
         mime="text/markdown"
     ) 
