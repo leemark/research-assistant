@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 import google.generativeai as genai
-from typing import List, Dict
+from typing import List, Dict, Tuple
 import os
 from datetime import datetime
 from bs4 import BeautifulSoup
@@ -138,12 +138,12 @@ def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
     - Consider new technologies and contrarian ideas, and clearly flag any high levels of speculation.
 
     --------------------------------------------------
-    Executive Summary:
-    - Provide 3-5 bullet points summarizing the key findings and recommendations.
-    - Ensure that the summary captures what the report deems most critical.
+    Overall Executive Summary:
+    - Provide one combined executive summary for the entire research report using 3-5 bullet points. 
+    - Ensure the summary captures the most critical findings and recommendations across all sources.
     --------------------------------------------------
 
-    Following the Executive Summary, provide a detailed analysis that includes:
+    Following the Overall Executive Summary, provide a detailed analysis that includes:
     1. A robust breakdown of evidence with source citations.
     2. Identification of conflicting perspectives or gaps in the research.
     3. Proactive recommendations for further investigation.
@@ -184,7 +184,7 @@ def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
     """
     
     chat = model.start_chat(history=[])
-    with st.spinner("Analyzing webpage contents..."):
+    with st.spinner("Analyzing search results..."):
         response = chat.send_message(prompt)
         return response.text
 
@@ -224,6 +224,67 @@ def simplify_search_query(refined_query: str) -> List[str]:
     response = model.generate_content(prompt)
     search_queries = [q.strip() for q in response.text.strip().split('\n') if q.strip()]
     return search_queries[:5]  # Ensure we return exactly 5 queries
+
+def write_final_report(refined_query: str, analyses: List[Tuple[str, str]], search_results: List[Dict], initial_report: str) -> str:
+    """
+    Generate a final combined research report using the initial analysis as context.
+    
+    The final report should include:
+    - Title of Paper
+    - Generated on: <timestamp>
+    - Abstract
+    - Table of Contents
+    - Refined Query
+    - Overall Executive Summary (combined across all analyses)
+    - Analyses 1-5
+    - Sources
+    """
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Build the final report prompt
+    prompt = f"""
+    Using the initial report context provided below, draft a final combined research report with the following structure:
+
+    Title of Paper: [Your Title Here, e.g., "Deep Research on {refined_query}"]
+    Generated on: {current_time}
+
+    Abstract:
+    Provide a brief summary of the entire research report.
+
+    Table of Contents:
+    1. Abstract
+    2. Refined Query
+    3. Overall Executive Summary
+    4. Analysis 1
+    5. Analysis 2
+    6. Analysis 3
+    7. Analysis 4
+    8. Analysis 5
+    9. Sources
+
+    Refined Query:
+    {refined_query}
+
+    Overall Executive Summary:
+    Produce one combined executive summary for the entire report using 3-5 bullet points.
+    Ensure that it captures the most critical findings and recommendations across all analyses.
+
+    Analyses:
+    {initial_report}
+
+    Sources:
+    """
+    # Append the sources list
+    for idx, result in enumerate(search_results, 1):
+         prompt += f"\n{idx}. [{result['title']}]({result['url']})"
+    
+    prompt += "\n\nPlease produce the final report in clear markdown format with the above structure."
+
+    # Start a new Gemini chat and use the prompt
+    chat = model.start_chat(history=[])
+    with st.spinner("Generating final report..."):
+         final_response = chat.send_message(prompt)
+         return final_response.text
 
 # Streamlit UI
 st.title("🔍 Deep Research Assistant")
