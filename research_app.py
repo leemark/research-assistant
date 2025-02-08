@@ -24,7 +24,20 @@ GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
 
 # Configure Gemini
 genai.configure(api_key=GOOGLE_API_KEY)
-model = genai.GenerativeModel('gemini-pro')
+
+# Updated Gemini model configuration
+generation_config = {
+    "temperature": 0.7,
+    "top_p": 0.95,
+    "top_k": 64,
+    "max_output_tokens": 65536,
+    "response_mime_type": "text/plain",
+}
+
+model = genai.GenerativeModel(
+    model_name="gemini-2.0-flash-thinking-exp-01-21",
+    generation_config=generation_config,
+)
 
 def brave_search(query: str, num_results: int = 10) -> List[Dict]:
     """
@@ -51,8 +64,10 @@ def brave_search(query: str, num_results: int = 10) -> List[Dict]:
 
 def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
     """
-    Analyze search results using Gemini
+    Analyze search results using Gemini 2.0 Flash Thinking
     """
+    chat = model.start_chat(history=[])
+    
     prompt = f"""
     Research Query: {query}
     
@@ -77,7 +92,7 @@ def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
     Format your response in clear sections with markdown formatting.
     """
     
-    response = model.generate_content(prompt)
+    response = chat.send_message(prompt)
     return response.text
 
 # Streamlit UI
