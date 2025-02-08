@@ -126,7 +126,7 @@ def analyze_with_gemini(query: str, search_results: List[Dict]) -> str:
     
     current_time = datetime.now().isoformat()
     
-    system_prompt = f"""
+    prompt = f"""
     You are an expert researcher and analyst. Today is {current_time}. 
     
     Core Analysis Guidelines:
