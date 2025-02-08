@@ -43,9 +43,9 @@ model = genai.GenerativeModel(
     generation_config=generation_config,
 )
 
-def brave_search(query: str, num_results: int = 10, max_retries: int = 3) -> List[Dict]:
+def brave_search(query: str, num_results: int = 10) -> List[Dict]:
     """
-    Perform a search using Brave Search API with retry and backoff in case of rate limiting.
+    Perform a search using Brave Search API
     """
     headers = {
         "X-Subscription-Token": BRAVE_API_KEY,
@@ -58,18 +58,13 @@ def brave_search(query: str, num_results: int = 10, max_retries: int = 3) -> Lis
         "count": num_results
     }
     
-    for attempt in range(max_retries):
-        response = requests.get(url, headers=headers, params=params)
-        if response.status_code == 200:
-            results = response.json().get('web', {}).get('results', [])
-            return results
-        elif response.status_code == 429:
-            st.warning("Rate limited by Brave Search API (429). Retrying...")
-            time.sleep(2 * (attempt + 1))
-        else:
-            st.error(f"Search API Error: {response.status_code}")
-            break
-    return []
+    response = requests.get(url, headers=headers, params=params)
+    if response.status_code == 200:
+        results = response.json().get('web', {}).get('results', [])
+        return results
+    else:
+        st.error(f"Search API Error: {response.status_code}")
+        return []
 
 def scrape_webpage(url: str) -> str:
     """
@@ -213,21 +208,6 @@ def simplify_search_query(refined_query: str) -> str:
     search_query = response.text.strip()
     return search_query
 
-def simplify_search_queries(refined_query: str) -> List[str]:
-    """
-    Convert the refined research query into 5 succinct web search queries suitable for using as search terms.
-    """
-    prompt = f"""
-    Convert the following refined research query into 5 concise web search queries that focus on the most relevant keywords:
-    
-    {refined_query}
-    
-    Provide each search query on a separate line.
-    """
-    response = model.generate_content(prompt)
-    search_queries = [line.strip() for line in response.text.strip().splitlines() if line.strip()]
-    return search_queries
-
 # Streamlit UI
 st.title("🔍 Deep Research Assistant")
 st.markdown("Powered by Brave Search and Google Gemini")
@@ -235,6 +215,7 @@ st.markdown("Powered by Brave Search and Google Gemini")
 # Input section
 with st.form("research_form"):
     query = st.text_input("Enter your research query:", placeholder="What would you like to research?")
+    num_results = st.slider("Number of search results to analyze:", min_value=5, max_value=20, value=10)
     submitted = st.form_submit_button("Start Research")
 
 if submitted and query:
@@ -242,23 +223,17 @@ if submitted and query:
          refined_query = refine_research_query(query)
     st.markdown(f"**Refined Research Query:** {refined_query}")
 
-    with st.spinner("Simplifying search queries..."):
-         web_search_queries = simplify_search_queries(refined_query)
-    st.markdown("**Web Search Queries:**")
-    for q in web_search_queries:
-         st.markdown(f"- {q}")
+    with st.spinner("Simplifying search query..."):
+         web_search_query = simplify_search_query(refined_query)
+    st.markdown(f"**Web Search Query:** {web_search_query}")
 
     with st.spinner("Searching and analyzing..."):
-         all_results = []
-         # Fixed number of search results per query: 5
-         for q in web_search_queries:
-              results = brave_search(q, 5)
-              all_results.extend(results)
-              time.sleep(1)  # Delay between API requests to avoid rate limiting
-         st.session_state.search_results = all_results
+         # Use the simplified web search query for Brave Search API
+         st.session_state.search_results = brave_search(web_search_query, num_results)
         
          if st.session_state.search_results:
-              st.session_state.analysis = analyze_with_gemini(refined_query, st.session_state.search_results)
+             # Use the refined query for analysis to maintain depth and detail
+             st.session_state.analysis = analyze_with_gemini(refined_query, st.session_state.search_results)
 
 # Display results
 if st.session_state.search_results:
