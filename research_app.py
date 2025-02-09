@@ -13,7 +13,7 @@ import pathlib
 
 # Configure page settings
 st.set_page_config(
-    page_title="Deep FREEsearch",
+    page_title="DEEP fREeSEARCH",
     page_icon="🔍",
     layout="wide"
 )
@@ -52,9 +52,9 @@ cached_keys = load_cached_api_keys()
 
 # API Key Input Section
 if not st.session_state.api_keys_initialized:
-    st.title("🔍 Deep FREEsearch")
+    st.title("🔍 DEEP fREeSEARCH")
     st.markdown("""
-    Welcome to Deep FREEsearch - your AI-powered research assistant! This tool helps you:
+    Welcome to DEEP fREeSEARCH - your AI-powered research assistant! This tool helps you:
     - 🎯 Conduct comprehensive research on any topic
     - 🤖 Get AI-powered analysis of multiple sources
     - 📊 Generate detailed research reports automatically
@@ -649,8 +649,8 @@ def determine_next_iteration(knowledge_gaps: List[str], knowledge_graph: Dict) -
         return False, ""
 
 # Streamlit UI
-st.title("🔍 Deep FREEsearch")
-st.markdown("*Your AI-powered research assistant*")
+st.title("DEEP fREeSEARCH")
+st.markdown("*The AI-powered research assistant*")
 
 # Input section
 with st.form("research_form"):

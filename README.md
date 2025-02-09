@@ -1,5 +1,4 @@
-# Deep FREEsearch
-
+# DEEP fREeSEARCH
 An advanced AI-powered research assistant that performs comprehensive, multi-step analysis using Brave Search API and Google's Gemini 2.0 Flash Thinking model.
 
 🔗 **Try it now:** [https://deepresearch.streamlit.app/](https://deepresearch.streamlit.app/)
