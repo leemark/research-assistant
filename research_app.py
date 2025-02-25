@@ -1509,7 +1509,7 @@ if submitted and query or st.session_state.research_phase != "initial":
                 font-weight: 600;
             }
             div.stButton > button p {
-                color: #fff;            
+                color: #fff !important;            
             }
             div[data-testid="column"]:nth-child(2) div.stButton > button:hover {
                 background-color: #e0e5ed;
