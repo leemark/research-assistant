@@ -18,6 +18,12 @@ import io
 import base64
 from streamlit_timeline import timeline
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 # Configure page settings
 st.set_page_config(
     page_title="DEEP fREeSEARCH",
@@ -657,89 +663,117 @@ def synthesize_iterations(iterations: List[Dict]) -> str:
     response = chat.send_message(prompt)
     return response.text
 
-def update_knowledge_graph(current_findings: str, knowledge_graph: Dict) -> Dict:
+def update_knowledge_graph(new_content: str, current_graph: Dict) -> Dict:
     """
-    Update the knowledge graph with new findings and connections.
-    The knowledge graph tracks key concepts, their relationships, and confidence levels.
+    Update the knowledge graph based on new content.
+    Returns the updated graph.
     """
     prompt = f"""
-    You are a precise JSON generator. Analyze these findings and update the knowledge graph.
+    You are an expert knowledge mapper. Analyze the following research content and extract a knowledge graph:
     
-    Current Findings:
-    {current_findings}
-
-    Existing Knowledge Graph:
-    {json.dumps(knowledge_graph, indent=2)}
-
-    IMPORTANT: You must return a valid JSON object with exactly this structure:
+    {new_content[:10000]}  # Limit content length to manage token count
+    
+    The knowledge graph should represent key concepts and their relationships.
+    For each concept, track evidence supporting or conflicting with it.
+    
+    Return a JSON object with this exact structure:
     {{
-        "concepts": {{
-            "concept_name": {{
-                "confidence": 0.95,
-                "related_concepts": ["concept1", "concept2"],
-                "supporting_evidence": ["evidence1", "evidence2"],
-                "conflicting_evidence": ["conflict1", "conflict2"]
-            }}
+      "concepts": {{
+        "concept_name": {{
+          "confidence": float,  # 0.0 to 1.0
+          "supporting_evidence": [string],
+          "conflicting_evidence": [string]
         }},
-        "relationships": [
-            {{
-                "source": "concept1",
-                "target": "concept2",
-                "type": "relates_to",
-                "confidence": 0.8
-            }}
-        ]
+        ...more concepts...
+      }},
+      "relationships": [
+        {{
+          "source": "concept_name_1",
+          "target": "concept_name_2",
+          "type": "relationship_type",
+          "confidence": float  # 0.0 to 1.0
+        }},
+        ...more relationships...
+      ]
     }}
-
-    Rules:
-    1. All confidence values must be between 0.0 and 1.0
-    2. All strings must be properly escaped
-    3. Arrays must contain at least one item
-    4. Concept names must be unique
-    5. Return ONLY the JSON object, no other text
+    
+    Extract 5-15 key concepts and their relationships. Focus on the most important concepts and strongest relationships.
+    Include ONLY JSON in your response with no other text.
     """
     
     try:
         response = model.generate_content(prompt)
         response_text = response.text.strip()
         
-        # Try to find JSON content if there's any surrounding text
+        # Try to find JSON content
         try:
             start_idx = response_text.index('{')
             end_idx = response_text.rindex('}') + 1
             json_str = response_text[start_idx:end_idx]
         except ValueError:
-            st.warning("Failed to extract JSON from response. Using existing graph.")
-            return knowledge_graph
+            # If we can't extract clean JSON, return the current graph
+            st.warning("Failed to parse knowledge graph structure.")
+            return current_graph
             
         try:
-            updated_graph = json.loads(json_str)
+            new_graph = json.loads(json_str)
             
-            # Validate the structure
-            if not all(key in updated_graph for key in ['concepts', 'relationships']):
-                st.warning("Invalid graph structure. Using existing graph.")
-                return knowledge_graph
+            # Merge with existing graph
+            if not current_graph.get('concepts'):
+                current_graph['concepts'] = {}
+            if not current_graph.get('relationships'):
+                current_graph['relationships'] = []
                 
-            # Validate confidence values
-            for concept in updated_graph['concepts'].values():
-                if not 0 <= concept['confidence'] <= 1:
-                    st.warning("Invalid confidence values. Using existing graph.")
-                    return knowledge_graph
+            # Update concepts
+            for concept, data in new_graph.get('concepts', {}).items():
+                if concept in current_graph['concepts']:
+                    # Update existing concept
+                    current_concept = current_graph['concepts'][concept]
+                    current_concept['confidence'] = (current_concept.get('confidence', 0) + data.get('confidence', 0)) / 2
                     
-            for rel in updated_graph['relationships']:
-                if not 0 <= rel['confidence'] <= 1:
-                    st.warning("Invalid confidence values. Using existing graph.")
-                    return knowledge_graph
-                    
-            return updated_graph
+                    # Merge evidence
+                    if 'supporting_evidence' not in current_concept:
+                        current_concept['supporting_evidence'] = []
+                    if 'conflicting_evidence' not in current_concept:
+                        current_concept['conflicting_evidence'] = []
+                        
+                    for evidence in data.get('supporting_evidence', []):
+                        if evidence not in current_concept['supporting_evidence']:
+                            current_concept['supporting_evidence'].append(evidence)
+                            
+                    for evidence in data.get('conflicting_evidence', []):
+                        if evidence not in current_concept['conflicting_evidence']:
+                            current_concept['conflicting_evidence'].append(evidence)
+                else:
+                    # Add new concept
+                    current_graph['concepts'][concept] = data
             
-        except json.JSONDecodeError as e:
-            st.warning(f"Failed to parse knowledge graph JSON: {str(e)}")
-            return knowledge_graph
+            # Update relationships
+            for rel in new_graph.get('relationships', []):
+                # Check if relationship already exists
+                exists = False
+                for existing_rel in current_graph['relationships']:
+                    if (existing_rel.get('source') == rel.get('source') and 
+                        existing_rel.get('target') == rel.get('target') and
+                        existing_rel.get('type') == rel.get('type')):
+                        # Update confidence
+                        existing_rel['confidence'] = (existing_rel.get('confidence', 0) + rel.get('confidence', 0)) / 2
+                        exists = True
+                        break
+                
+                # Add new relationship if it doesn't exist
+                if not exists:
+                    current_graph['relationships'].append(rel)
+            
+            return current_graph
+            
+        except json.JSONDecodeError:
+            st.warning("Failed to parse knowledge graph JSON.")
+            return current_graph
             
     except Exception as e:
         st.warning(f"Error updating knowledge graph: {str(e)}")
-        return knowledge_graph
+        return current_graph
 
 def determine_next_iteration(knowledge_gaps: List[str], knowledge_graph: Dict) -> Tuple[bool, str]:
     """
@@ -1294,118 +1328,237 @@ if submitted and query and st.session_state.research_phase == "complete":
     st.session_state.current_iteration = 0
     st.session_state.research_iterations = []
     st.session_state.knowledge_graph = {}
+    st.session_state.report_tab = "plan"
 
-if submitted and query:
-    # Create containers for different phases
-    plan_container = st.empty()
-    progress_container = st.empty()
-    status_container = st.empty()
+# Create tabs for different phases of research
+if submitted and query or st.session_state.research_phase != "initial":
+    # Create tabs
+    plan_tab, progress_tab, graph_tab, report_tab = st.tabs(["Research Plan", "Research Progress", "Knowledge Graph", "Final Report"])
     
     # PHASE 1: PLANNING
-    if st.session_state.research_phase == "initial":
-        with st.spinner("Generating research plan..."):
-            research_plan = generate_research_plan(query)
-            st.session_state.research_plan = research_plan
-            st.session_state.sections = research_plan["sections"]
-            st.session_state.research_phase = "planning"
-    
-    # Display the research plan for review
-    if st.session_state.research_phase == "planning":
-        plan_container.markdown("## Research Plan")
-        plan_text = f"### {st.session_state.research_plan['title']}\n\n"
-        plan_text += "#### Sections:\n"
-        for section in st.session_state.research_plan["sections"]:
-            plan_text += f"**{section['title']}**: {section['description']}\n\n"
-            plan_text += "Key questions:\n"
-            for q in section.get('key_questions', []):
-                plan_text += f"- {q}\n"
-            plan_text += "\n"
+    with plan_tab:
+        if st.session_state.research_phase == "initial":
+            with st.spinner("Generating research plan..."):
+                research_plan = generate_research_plan(query)
+                st.session_state.research_plan = research_plan
+                st.session_state.sections = research_plan["sections"]
+                st.session_state.research_phase = "planning"
+                st.rerun()  # Rerun to update the UI
         
-        plan_container.markdown(plan_text)
-        
-        # Buttons for plan feedback
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("Proceed with this plan"):
-                st.session_state.research_phase = "researching"
-                plan_container.empty()
-                st.rerun()
-        with col2:
-            if st.button("Regenerate plan"):
-                st.session_state.research_plan = None
-                st.session_state.research_phase = "initial"
-                plan_container.empty()
-                st.rerun()
-    
-    # PHASE 2: SECTION-BY-SECTION RESEARCH  
-    if st.session_state.research_phase == "researching":
-        # Calculate overall progress
-        total_sections = len(st.session_state.sections)
-        current_section_idx = st.session_state.current_section
-        
-        if current_section_idx < total_sections:
-            # Update progress
-            progress_container.progress((current_section_idx) / total_sections)
-            current_section = st.session_state.sections[current_section_idx]
-            status_container.markdown(f"**Researching Section {current_section_idx + 1}/{total_sections}: {current_section['title']}**")
+        # Display the research plan for review if in planning phase
+        if st.session_state.research_phase == "planning":
+            st.markdown("## Research Plan")
+            st.markdown(f"""<div class='plan-card'>
+                <h3>{st.session_state.research_plan['title']}</h3>
+                <p>{st.session_state.research_plan.get('introduction', '')}</p>
+            </div>""", unsafe_allow_html=True)
             
-            # Research the current section
-            with st.spinner(f"Researching section: {current_section['title']}"):
-                section_result = research_section(current_section, query)
+            st.markdown("### Research Sections")
+            for section in st.session_state.research_plan["sections"]:
+                st.markdown(f"""<div class='section-card'>
+                    <div class='section-header'>{section['title']}</div>
+                    <p>{section['description']}</p>
+                    <div style='margin-top: 10px;'>Key questions:</div>
+                </div>""", unsafe_allow_html=True)
                 
-                # Store the section content
-                st.session_state.section_data[current_section['id']] = section_result["content"]
-                st.session_state.section_sources[current_section['id']] = section_result["sources"]
+                for q in section.get('key_questions', []):
+                    st.markdown(f"<div class='key-question'>{q}</div>", unsafe_allow_html=True)
+            
+            # Buttons for plan feedback
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Proceed with this plan"):
+                    st.session_state.research_phase = "researching"
+                    st.session_state.report_tab = "progress"
+                    st.success("Starting research with approved plan!")
+                    time.sleep(1)  # Short delay to show the success message
+                    st.rerun()
+            with col2:
+                if st.button("Regenerate plan"):
+                    st.session_state.research_plan = None
+                    st.session_state.research_phase = "initial"
+                    st.info("Regenerating research plan...")
+                    time.sleep(1)  # Short delay to show the info message
+                    st.rerun()
+    
+    # PHASE 2: SECTION-BY-SECTION RESEARCH
+    with progress_tab:
+        if st.session_state.research_phase in ["researching", "synthesizing", "complete"]:
+            # Display research progress
+            st.markdown("## Research Progress")
+            
+            # Calculate overall progress
+            total_sections = len(st.session_state.sections)
+            completed_sections = len(st.session_state.section_data)
+            current_section_idx = min(st.session_state.current_section, total_sections-1)
+            
+            # Progress bar
+            progress_value = completed_sections / total_sections if total_sections > 0 else 0
+            st.progress(progress_value)
+            
+            # Show progress status
+            if st.session_state.research_phase == "researching":
+                if current_section_idx < total_sections:
+                    current_section = st.session_state.sections[current_section_idx]
+                    st.markdown(f"""<div class='phase-indicator'>
+                        Currently researching: <strong>{current_section['title']}</strong> (Section {current_section_idx + 1}/{total_sections})
+                    </div>""", unsafe_allow_html=True)
+            elif st.session_state.research_phase == "synthesizing":
+                st.markdown("<div class='phase-indicator'>Synthesizing final report...</div>", unsafe_allow_html=True)
+            elif st.session_state.research_phase == "complete":
+                st.markdown("<div class='phase-indicator success-message'>Research complete! View the final report in the 'Final Report' tab.</div>", unsafe_allow_html=True)
+            
+            # Display timeline if we have at least one completed section
+            if completed_sections > 0:
+                st.markdown("### Research Timeline")
+                timeline_data = create_research_timeline()
+                timeline(timeline_data, height=400)
+            
+            # Display completed sections
+            if completed_sections > 0:
+                st.markdown("### Completed Sections")
                 
-                # Move to the next section
-                st.session_state.current_section += 1
-                
-                if st.session_state.current_section >= total_sections:
-                    st.session_state.research_phase = "synthesizing"
-                
-                # Rerun to show progress on next section
-                st.rerun()
+                for section in st.session_state.sections:
+                    section_id = section['id']
+                    if section_id in st.session_state.section_data:
+                        col1, col2, col3 = st.columns([5, 1, 1])
+                        with col1:
+                            st.markdown(f"""<div class='section-header'>{section['title']}</div>""", unsafe_allow_html=True)
+                        with col2:
+                            if st.button("View Content", key=f"view_{section_id}"):
+                                toggle_section_display(section_id)
+                        with col3:
+                            if st.button("View Sources", key=f"sources_{section_id}"):
+                                toggle_sources_display(section_id)
+                                
+                        # Display section content if expanded
+                        if st.session_state.show_completed_section == section_id:
+                            st.markdown(f"""<div class='info-box'>{st.session_state.section_data[section_id]}</div>""", unsafe_allow_html=True)
+                            
+                        # Display section sources if expanded
+                        if st.session_state.show_section_sources == section_id:
+                            sources = st.session_state.section_sources.get(section_id, [])
+                            if sources:
+                                with st.expander("Sources", expanded=True):
+                                    for source in sources:
+                                        st.markdown(f"[{source['title']}]({source['url']}) - {source['domain']}")
+            
+            # Start the research process if we're in the right phase and not yet complete
+            if st.session_state.research_phase == "researching" and current_section_idx < total_sections:
+                with st.spinner(f"Researching section: {st.session_state.sections[current_section_idx]['title']}"):
+                    # Only execute this code if the tab is visible
+                    if st.session_state.report_tab == "progress":
+                        current_section = st.session_state.sections[current_section_idx]
+                        section_result = research_section(current_section, query)
+                        
+                        # Store the section content
+                        st.session_state.section_data[current_section['id']] = section_result["content"]
+                        st.session_state.section_sources[current_section['id']] = section_result["sources"]
+                        
+                        # Move to the next section
+                        st.session_state.current_section += 1
+                        
+                        if st.session_state.current_section >= total_sections:
+                            st.session_state.research_phase = "synthesizing"
+                        
+                        # Rerun to update the UI
+                        st.rerun()
+            
+            # Generate final report if in synthesis phase
+            if st.session_state.research_phase == "synthesizing":
+                with st.spinner("Generating final report..."):
+                    final_report = synthesize_sections(
+                        st.session_state.sections,
+                        st.session_state.section_data,
+                        query,
+                        st.session_state.research_plan.get("introduction", ""),
+                        st.session_state.research_plan.get("conclusion", "")
+                    )
+                    
+                    # Store final report in session state
+                    st.session_state.final_report = final_report
+                    
+                    # Generate timestamp for the file name
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    st.session_state.export_filename = f"research_report_{timestamp}.md"
+                    
+                    # Mark research as complete
+                    st.session_state.research_phase = "complete"
+                    st.session_state.report_tab = "report"  # Switch to report tab
+                    
+                    # Rerun to display the report
+                    st.rerun()
+    
+    # PHASE 3: KNOWLEDGE GRAPH VISUALIZATION
+    with graph_tab:
+        st.markdown("## Knowledge Graph")
         
-    # PHASE 3: SYNTHESIS
-    if st.session_state.research_phase == "synthesizing":
-        status_container.markdown("**Synthesizing final report...**")
-        progress_container.progress(1.0)  # Show complete
-        
-        with st.spinner("Generating final report..."):
-            final_report = synthesize_sections(
-                st.session_state.sections,
-                st.session_state.section_data,
-                query,
-                st.session_state.research_plan.get("introduction", ""),
-                st.session_state.research_plan.get("conclusion", "")
+        # Only show if we have at least one completed section
+        if len(st.session_state.section_data) > 0:
+            # Attempt to generate a knowledge graph if it's empty
+            if not st.session_state.knowledge_graph:
+                with st.spinner("Generating knowledge graph..."):
+                    # Combine all section content
+                    all_content = "\n\n".join([content for content in st.session_state.section_data.values()])
+                    
+                    # Initialize a simple knowledge graph structure
+                    initial_graph = {
+                        "concepts": {},
+                        "relationships": []
+                    }
+                    
+                    # Update the knowledge graph
+                    st.session_state.knowledge_graph = update_knowledge_graph(all_content, initial_graph)
+            
+            # Display the knowledge graph
+            graph_data = render_knowledge_graph()
+            if graph_data:
+                st.image(f"data:image/png;base64,{graph_data}", use_column_width=True)
+                
+                # Display detailed concept information
+                if 'concepts' in st.session_state.knowledge_graph:
+                    with st.expander("Concept Details", expanded=False):
+                        for concept, data in st.session_state.knowledge_graph.get('concepts', {}).items():
+                            st.markdown(f"### {concept}")
+                            st.markdown(f"**Confidence:** {data.get('confidence', 0):.2f}")
+                            
+                            if 'supporting_evidence' in data and data['supporting_evidence']:
+                                st.markdown("**Supporting Evidence:**")
+                                for evidence in data['supporting_evidence']:
+                                    st.markdown(f"- {evidence}")
+                            
+                            if 'conflicting_evidence' in data and data['conflicting_evidence']:
+                                st.markdown("**Conflicting Evidence:**")
+                                for evidence in data['conflicting_evidence']:
+                                    st.markdown(f"- {evidence}")
+                            
+                            st.markdown("---")
+            else:
+                st.info("Knowledge graph visualization will appear here as research progresses.")
+        else:
+            st.info("Knowledge graph will be generated once research begins.")
+    
+    # PHASE 4: FINAL REPORT
+    with report_tab:
+        if hasattr(st.session_state, 'final_report') and st.session_state.research_phase == "complete":
+            # Display download button
+            st.download_button(
+                label="📥 Export Final Report",
+                data=st.session_state.final_report,
+                file_name=st.session_state.export_filename,
+                mime="text/markdown"
             )
             
-            # Store final report in session state
-            st.session_state.final_report = final_report
-            
-            # Generate timestamp for the file name
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            st.session_state.export_filename = f"research_report_{timestamp}.md"
-            
-            # Mark research as complete
-            st.session_state.research_phase = "complete"
-            
-            # Clear containers
-            progress_container.empty()
-            status_container.empty()
-            
-            # Rerun to display the report
-            st.rerun()
-
-# Display results if available
-if hasattr(st.session_state, 'final_report') and st.session_state.research_phase == "complete":
-    # Display download button in a small container at the top
-    st.container().download_button(
-        label="📥 Export Final Report",
-        data=st.session_state.final_report,
-        file_name=st.session_state.export_filename,
-        mime="text/markdown"
-    )
+            # Display the final report
+            st.markdown(st.session_state.final_report)
+        else:
+            st.info("The final report will appear here when research is complete.")
     
-    # Display the final report in a dedicated section
-    st.markdown(st.session_state.final_report) 
+    # Track which tab is active for the research flow
+    active_tabs = {"Research Plan": "plan", "Research Progress": "progress", 
+                  "Knowledge Graph": "graph", "Final Report": "report"}
+    
+    # Update the active tab in session state
+    for tab_name, tab_key in active_tabs.items():
+        if plan_tab and tab_name in [t.label for t in [plan_tab, progress_tab, graph_tab, report_tab] if t.selected]:
+            st.session_state.report_tab = tab_key 
