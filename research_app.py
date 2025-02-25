@@ -1437,10 +1437,9 @@ if submitted and query or st.session_state.research_phase != "initial":
     # Use the current tab from session state (default to "plan" if not set)
     active_tab_key = st.session_state.get("report_tab", "plan")
     tab_index_map = {"plan": 0, "progress": 1, "graph": 2, "report": 3}
-    active_tab_index = tab_index_map.get(active_tab_key, 0)
     
-    # Create tabs with the active tab pre-selected
-    tabs = st.tabs([f"{icon} {name}" for name, icon in tab_icons.items()], index=active_tab_index)
+    # Create tabs without using the index parameter
+    tabs = st.tabs([f"{icon} {name}" for name, icon in tab_icons.items()])
     plan_tab, progress_tab, graph_tab, report_tab = tabs
     
     # PHASE 1: PLANNING
