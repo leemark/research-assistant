@@ -44,6 +44,7 @@ st.markdown("""
         padding: 20px;
         margin-bottom: 20px;
         border-left: 5px solid #4169E1;
+        color: #333333;
     }
     .section-card {
         background-color: #f0f2f6;
@@ -51,6 +52,7 @@ st.markdown("""
         padding: 15px;
         margin: 10px 0;
         border-left: 4px solid #5cb85c;
+        color: #333333;
     }
     .plan-card {
         background-color: #f8f9fa;
@@ -58,6 +60,7 @@ st.markdown("""
         padding: 15px;
         margin: 15px 0;
         border-left: 5px solid #ff7f0e;
+        color: #333333;
     }
     .info-box {
         background-color: #e6f3ff;
@@ -65,6 +68,7 @@ st.markdown("""
         padding: 10px;
         margin: 10px 0;
         border: 1px solid #b8daff;
+        color: #333333;
     }
     .sources-box {
         background-color: #f5f5f5;
@@ -73,6 +77,7 @@ st.markdown("""
         margin: 10px 0;
         max-height: 200px;
         overflow-y: auto;
+        color: #333333;
     }
     .key-question {
         background-color: #f2f7ff;
@@ -81,6 +86,7 @@ st.markdown("""
         margin: 5px 0;
         display: inline-block;
         font-size: 0.9em;
+        color: #333333;
     }
     .phase-indicator {
         font-size: 0.8em;
@@ -92,6 +98,7 @@ st.markdown("""
         font-size: 0.9em;
         font-weight: bold;
         margin-bottom: 5px;
+        color: #333333;
     }
     .success-message {
         color: #28a745;
@@ -104,24 +111,76 @@ st.markdown("""
     }
     .header-text {
         margin: 0;
+        color: #333333;
     }
     .header-button {
         margin-left: 15px;
     }
-    /* Tab styling */
+    
+    /* Enhanced Tab styling */
+    .stTabs {
+        margin-top: 1rem;
+    }
     .stTabs [data-baseweb="tab-list"] {
-        gap: 2px;
+        gap: 0px;
+        background-color: #1e222e;
+        padding: 10px 10px 0 10px;
+        border-radius: 10px 10px 0 0;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     }
     .stTabs [data-baseweb="tab"] {
         height: 50px;
         white-space: pre-wrap;
-        border-radius: 4px 4px 0 0;
+        border-radius: 8px 8px 0 0;
+        margin-right: 5px;
+        padding: 10px 20px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        background-color: rgba(255, 255, 255, 0.08);
+        border: none;
+        color: #a9b2c3;
+    }
+    .stTabs [data-baseweb="tab"][aria-selected="true"] {
+        background-color: #3d5afb;
+        color: white;
+        box-shadow: 0 2px 10px rgba(61, 90, 251, 0.5);
+        transform: translateY(-5px);
+    }
+    .stTabs [data-baseweb="tab-highlight"] {
+        display: none;
+    }
+    .stTabs [data-baseweb="tab"]:hover:not([aria-selected="true"]) {
+        background-color: rgba(255, 255, 255, 0.15);
+        color: white;
+        transform: translateY(-3px);
+    }
+    .stTabs [data-baseweb="tab-panel"] {
+        background-color: white;
+        border-radius: 0 0 10px 10px;
+        padding: 20px;
+        border: 1px solid #e0e0e0;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        color: #333333;
+    }
+    .stTabs [data-baseweb="tab-panel"] p,
+    .stTabs [data-baseweb="tab-panel"] h1,
+    .stTabs [data-baseweb="tab-panel"] h2,
+    .stTabs [data-baseweb="tab-panel"] h3,
+    .stTabs [data-baseweb="tab-panel"] h4,
+    .stTabs [data-baseweb="tab-panel"] li {
+        color: #333333;
     }
     .section-header {
         font-size: 1.2em;
         font-weight: bold;
         margin-bottom: 10px;
         color: #2c3e50;
+    }
+    
+    /* Custom tab icon styles */
+    .tab-icon {
+        margin-right: 6px;
+        margin-top: -2px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -1314,8 +1373,7 @@ st.markdown("*The AI-powered research assistant*")
 # Input section
 with st.form("research_form"):
     query = st.text_input("Enter your research query:", placeholder="What would you like to research?")
-    max_iterations = st.slider("Maximum research iterations per section:", min_value=1, max_value=5, value=2)
-    submitted = st.form_submit_button("Start Research")
+    submitted = st.form_submit_button("Generate Research Plan")
 
 # Reset research state if starting new query
 if submitted and query and st.session_state.research_phase == "complete":
@@ -1332,8 +1390,17 @@ if submitted and query and st.session_state.research_phase == "complete":
 
 # Create tabs for different phases of research
 if submitted and query or st.session_state.research_phase != "initial":
-    # Create tabs
-    plan_tab, progress_tab, graph_tab, report_tab = st.tabs(["Research Plan", "Research Progress", "Knowledge Graph", "Final Report"])
+    # Create tabs with icons
+    tab_icons = {
+        "Research Plan": "📋", 
+        "Research Progress": "📊", 
+        "Knowledge Graph": "🔄", 
+        "Final Report": "📄"
+    }
+    
+    # Create tabs with icon prefixes
+    tabs = st.tabs([f"<span class='tab-icon'>{icon}</span> {name}" for name, icon in tab_icons.items()], format_func=lambda x: x)
+    plan_tab, progress_tab, graph_tab, report_tab = tabs
     
     # PHASE 1: PLANNING
     with plan_tab:
