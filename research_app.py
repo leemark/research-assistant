@@ -1508,7 +1508,8 @@ if submitted and query or st.session_state.research_phase != "initial":
                 border: 1px solid #d8dde6;
                 font-weight: 600;
             }
-            div.stButton button p {
+            div.stButton button p,
+            .stTabs [data-baseweb="tab-panel"] button p {
                 color: #fff !important;            
             }
             div[data-testid="column"]:nth-child(2) div.stButton > button:hover {
