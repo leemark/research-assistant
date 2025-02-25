@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 import google.generativeai as genai
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 import os
 from datetime import datetime
 from bs4 import BeautifulSoup
@@ -148,6 +148,18 @@ if 'knowledge_graph' not in st.session_state:
     st.session_state.knowledge_graph = {}
 if 'current_iteration' not in st.session_state:
     st.session_state.current_iteration = 0
+if 'research_plan' not in st.session_state:
+    st.session_state.research_plan = None
+if 'current_section' not in st.session_state:
+    st.session_state.current_section = 0
+if 'sections' not in st.session_state:
+    st.session_state.sections = []
+if 'section_data' not in st.session_state:
+    st.session_state.section_data = {}
+if 'section_sources' not in st.session_state:
+    st.session_state.section_sources = {}
+if 'research_phase' not in st.session_state:
+    st.session_state.research_phase = "initial"
 
 # Updated Gemini model configuration
 generation_config = {
@@ -648,6 +660,347 @@ def determine_next_iteration(knowledge_gaps: List[str], knowledge_graph: Dict) -
     except (json.JSONDecodeError, KeyError):
         return False, ""
 
+def generate_research_plan(query: str) -> Dict:
+    """
+    Generate a comprehensive research plan with sections for the given query.
+    Returns a dictionary with the plan structure.
+    """
+    prompt = f"""
+    You are an expert research planner. Create a comprehensive research plan for investigating the following topic:
+    
+    Topic: "{query}"
+    
+    Your task is to:
+    1. Break down this topic into 4-7 clearly defined sections that together will provide thorough coverage
+    2. For each section, provide a brief description of what should be researched
+    3. Identify the logical ordering of sections that builds understanding progressively
+    4. Consider both breadth (covering different aspects) and depth (exploring key areas thoroughly)
+    5. Flag any sections that may require specialized knowledge or more extensive research
+    
+    Return your plan as a JSON object with exactly this structure:
+    {{
+      "title": "Main research report title",
+      "sections": [
+        {{
+          "id": 1,
+          "title": "Section title",
+          "description": "Brief description of research goals for this section",
+          "key_questions": ["Question 1", "Question 2", "Question 3"]
+        }},
+        ...additional sections...
+      ],
+      "introduction": "Brief overview of the research approach",
+      "conclusion": "What the final synthesis should address"
+    }}
+
+    Your response should ONLY include the JSON object with no additional text.
+    """
+    
+    try:
+        response = model.generate_content(prompt)
+        response_text = response.text.strip()
+        
+        # Try to find JSON content if there's any surrounding text
+        try:
+            start_idx = response_text.index('{')
+            end_idx = response_text.rindex('}') + 1
+            json_str = response_text[start_idx:end_idx]
+        except ValueError:
+            st.warning("Failed to extract JSON from response.")
+            return {
+                "title": f"Research on {query}",
+                "sections": [{"id": 1, "title": "General Overview", "description": "General information about the topic", "key_questions": [f"What is {query}?"]}],
+                "introduction": "Research introduction",
+                "conclusion": "Research conclusion"
+            }
+            
+        try:
+            research_plan = json.loads(json_str)
+            return research_plan
+        except json.JSONDecodeError as e:
+            st.warning(f"Failed to parse research plan JSON: {str(e)}")
+            return {
+                "title": f"Research on {query}",
+                "sections": [{"id": 1, "title": "General Overview", "description": "General information about the topic", "key_questions": [f"What is {query}?"]}],
+                "introduction": "Research introduction",
+                "conclusion": "Research conclusion"
+            }
+            
+    except Exception as e:
+        st.warning(f"Error generating research plan: {str(e)}")
+        return {
+            "title": f"Research on {query}",
+            "sections": [{"id": 1, "title": "General Overview", "description": "General information about the topic", "key_questions": [f"What is {query}?"]}],
+            "introduction": "Research introduction",
+            "conclusion": "Research conclusion"
+        }
+
+def generate_section_queries(section: Dict, main_query: str) -> List[str]:
+    """
+    Generate search queries specifically for a section based on its content and key questions.
+    Returns a list of search queries.
+    """
+    prompt = f"""
+    You are an expert search query generator. Create effective search queries for researching the following section of a larger research project:
+    
+    Main Research Topic: "{main_query}"
+    
+    Section Title: "{section['title']}"
+    Section Description: "{section['description']}"
+    Key Questions:
+    {json.dumps(section.get('key_questions', []))}
+    
+    Generate 3-5 search queries that will:
+    1. Target specific information needed for this section
+    2. Use varied approaches to find different aspects of the topic
+    3. Be specific enough to return relevant results
+    4. Include any specialized terminology that would help find authoritative sources
+    5. Be properly formatted for web search (clear, concise, well-structured)
+    
+    Return ONLY a list of search queries, one per line, with no additional text, numbering, or formatting.
+    """
+    
+    response = model.generate_content(prompt)
+    search_queries = [q.strip() for q in response.text.strip().split('\n') if q.strip()]
+    return search_queries[:5]  # Ensure we return at most 5 queries
+
+def research_section(section: Dict, main_query: str) -> Dict:
+    """
+    Conduct research for a specific section of the report.
+    Returns a dictionary with the section content and sources.
+    """
+    section_id = section['id']
+    section_title = section['title']
+    
+    # If we've already researched this section, return the cached data
+    if section_id in st.session_state.section_data:
+        return {
+            "content": st.session_state.section_data[section_id],
+            "sources": st.session_state.section_sources.get(section_id, [])
+        }
+    
+    # Generate search queries for this section
+    search_queries = generate_section_queries(section, main_query)
+    
+    # Initialize collection of results and sources
+    all_results = []
+    all_sources = []
+    
+    # Conduct searches for each query
+    for query in search_queries:
+        search_results = brave_search(query)
+        
+        if search_results:
+            all_results.extend(search_results)
+            
+            # Track sources for citation
+            for result in search_results:
+                all_sources.append({
+                    "title": result['title'],
+                    "url": result['url'],
+                    "domain": urlparse(result['url']).netloc,
+                    "query": query
+                })
+    
+    # Remove duplicate sources
+    unique_sources = []
+    seen_urls = set()
+    for source in all_sources:
+        if source['url'] not in seen_urls:
+            seen_urls.add(source['url'])
+            unique_sources.append(source)
+    
+    # Analyze the search results for this section
+    section_content = analyze_section(section, main_query, all_results, unique_sources)
+    
+    # Cache the results
+    st.session_state.section_data[section_id] = section_content
+    st.session_state.section_sources[section_id] = unique_sources
+    
+    return {
+        "content": section_content,
+        "sources": unique_sources
+    }
+
+def analyze_section(section: Dict, main_query: str, search_results: List[Dict], sources: List[Dict]) -> str:
+    """
+    Analyze search results specifically for a section of the report.
+    Returns the section content with proper citations.
+    """
+    # Scrape webpage contents from provided sources
+    urls = [result['url'] for result in search_results]
+    webpage_contents = scrape_urls_parallel(urls)
+    
+    # Prepare the prompt for section analysis
+    current_time = datetime.now().isoformat()
+    prompt = f"""
+    You are an expert researcher focusing on a specific section of a larger research report. 
+    Today is {current_time}. 
+    
+    RESEARCH CONTEXT:
+    Main Research Topic: "{main_query}"
+    Current Section: "{section['title']}"
+    Section Purpose: "{section['description']}"
+    Key Questions for this Section:
+    {json.dumps(section.get('key_questions', []))}
+    
+    INSTRUCTIONS:
+    - Focus ONLY on the specific section assigned to you, not the entire research topic
+    - Use inline citations to reference sources (e.g., [Source 1])
+    - Prioritize depth over breadth for this specific section
+    - Include key data, statistics, or findings relevant to this section
+    - Address contradictions or debates in the literature if present
+    - Maintain an objective, scholarly tone
+    - Structure your response with clear subheadings appropriate for this section
+    - Do NOT include general introductions or conclusions about the overall topic
+    
+    Below are the sources and their content summaries for this section:
+    {'-' * 50}
+    """
+    
+    for idx, result in enumerate(search_results, 1):
+        url = result['url']
+        content = webpage_contents.get(url, "Content not available")
+        
+        prompt += f"""
+        {idx}. Title: {result['title']}
+        URL: {url}
+        Description: {result.get('description', 'No description available')}
+        
+        Content Summary:
+        {content[:4000]}  # Limit content length to manage token count
+        
+        {'-' * 30}
+        """
+    
+    prompt += f"""
+    {'-' * 50}
+    
+    Write a comprehensive analysis ONLY for the "{section['title']}" section of the research report.
+    Focus exclusively on this section's scope as defined above.
+    Use proper markdown formatting with subheadings and lists as appropriate.
+    Include inline citations [Source X] when referencing specific information.
+    Do not include an introduction or conclusion to the overall report - just focus on this section.
+    """
+    
+    # Generate the section content
+    chat = model.start_chat(history=[])
+    with st.spinner(f"Analyzing sources for section: {section['title']}..."):
+        response = chat.send_message(prompt)
+        return response.text
+
+def synthesize_sections(sections: List[Dict], section_data: Dict, main_query: str, introduction: str, conclusion: str) -> str:
+    """
+    Synthesize all the section content into a cohesive report.
+    """
+    # Prepare the sections in order
+    ordered_content = []
+    for section in sections:
+        section_id = section['id']
+        if section_id in section_data:
+            ordered_content.append({
+                "title": section['title'],
+                "content": section_data[section_id]
+            })
+    
+    # Generate introduction if needed
+    intro_prompt = f"""
+    You are an expert researcher writing the introduction to a comprehensive research report.
+    
+    Research Topic: "{main_query}"
+    
+    The report contains the following sections:
+    {json.dumps([s['title'] for s in sections])}
+    
+    Write a compelling introduction for this research report that:
+    1. Clearly states the purpose and scope of the research
+    2. Provides context for why this topic is important or relevant
+    3. Briefly outlines the structure of the report and what readers will learn
+    4. Sets the appropriate academic or professional tone
+    5. Is approximately 250-350 words in length
+    
+    Your introduction should be engaging yet scholarly, and should not include citations.
+    Format your response in clear markdown.
+    """
+    
+    # Generate conclusion if needed
+    conclusion_prompt = f"""
+    You are an expert researcher writing the conclusion to a comprehensive research report.
+    
+    Research Topic: "{main_query}"
+    
+    The report contains the following sections:
+    {json.dumps([{"title": s['title'], "key_points": section_data.get(s['id'], "")[:500]} for s in sections])}
+    
+    Write a thoughtful conclusion for this research report that:
+    1. Synthesizes the key findings across all sections
+    2. Identifies important patterns, trends, or connections
+    3. Discusses limitations of the current research where appropriate
+    4. Suggests areas for future research or exploration
+    5. Ends with a strong closing statement about the significance of this topic
+    6. Is approximately 250-350 words in length
+    
+    Your conclusion should provide valuable closure and perspective without introducing new information.
+    Format your response in clear markdown.
+    """
+    
+    # Generate final report with all sections
+    chat = model.start_chat(history=[])
+    
+    # Generate introduction if not provided
+    with st.spinner("Generating introduction..."):
+        if not introduction or introduction == "Research introduction":
+            intro_response = chat.send_message(intro_prompt)
+            introduction = intro_response.text
+    
+    # Generate conclusion if not provided
+    with st.spinner("Generating conclusion..."):
+        if not conclusion or conclusion == "Research conclusion":
+            conclusion_response = chat.send_message(conclusion_prompt)
+            conclusion = conclusion_response.text
+    
+    # Assemble the final report
+    final_report = f"# {main_query}\n\n"
+    final_report += f"*Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*\n\n"
+    
+    # Add table of contents
+    final_report += "## Table of Contents\n"
+    final_report += "1. [Introduction](#introduction)\n"
+    for i, section in enumerate(sections, 2):
+        # Create anchor from title
+        anchor = section['title'].lower().replace(' ', '-').replace(',', '').replace('.', '')
+        final_report += f"{i}. [{section['title']}](#{anchor})\n"
+    final_report += f"{len(sections) + 2}. [Conclusion](#conclusion)\n"
+    final_report += f"{len(sections) + 3}. [Sources](#sources)\n\n"
+    
+    # Add introduction
+    final_report += "## Introduction\n\n"
+    final_report += introduction + "\n\n"
+    
+    # Add each section
+    for section in sections:
+        section_id = section['id']
+        if section_id in section_data:
+            final_report += f"## {section['title']}\n\n"
+            final_report += section_data[section_id] + "\n\n"
+    
+    # Add conclusion
+    final_report += "## Conclusion\n\n"
+    final_report += conclusion + "\n\n"
+    
+    # Add sources
+    final_report += "## Sources\n\n"
+    all_sources = []
+    for section_id, sources in st.session_state.section_sources.items():
+        for source in sources:
+            if source not in all_sources:
+                all_sources.append(source)
+    
+    for i, source in enumerate(all_sources, 1):
+        final_report += f"{i}. [{source['title']}]({source['url']})\n"
+    
+    return final_report
+
 # Streamlit UI
 st.title("DEEP fREeSEARCH")
 st.markdown("*The AI-powered research assistant*")
@@ -655,112 +1008,125 @@ st.markdown("*The AI-powered research assistant*")
 # Input section
 with st.form("research_form"):
     query = st.text_input("Enter your research query:", placeholder="What would you like to research?")
-    max_iterations = st.slider("Maximum research iterations:", min_value=1, max_value=5, value=3)
+    max_iterations = st.slider("Maximum research iterations per section:", min_value=1, max_value=5, value=2)
     submitted = st.form_submit_button("Start Research")
 
+# Reset research state if starting new query
+if submitted and query and st.session_state.research_phase == "complete":
+    st.session_state.research_plan = None
+    st.session_state.current_section = 0
+    st.session_state.sections = []
+    st.session_state.section_data = {}
+    st.session_state.section_sources = {}
+    st.session_state.research_phase = "initial"
+    st.session_state.current_iteration = 0
+    st.session_state.research_iterations = []
+    st.session_state.knowledge_graph = {}
+
 if submitted and query:
-    # Create a container for progress tracking
+    # Create containers for different phases
+    plan_container = st.empty()
     progress_container = st.empty()
     status_container = st.empty()
     
-    # Initialize or reset research state
-    if st.session_state.current_iteration == 0:
-        st.session_state.research_iterations = []
-        st.session_state.knowledge_graph = {}
+    # PHASE 1: PLANNING
+    if st.session_state.research_phase == "initial":
+        with st.spinner("Generating research plan..."):
+            research_plan = generate_research_plan(query)
+            st.session_state.research_plan = research_plan
+            st.session_state.sections = research_plan["sections"]
+            st.session_state.research_phase = "planning"
     
-    while st.session_state.current_iteration < max_iterations:
-        current_iteration = st.session_state.current_iteration + 1
+    # Display the research plan for review
+    if st.session_state.research_phase == "planning":
+        plan_container.markdown("## Research Plan")
+        plan_text = f"### {st.session_state.research_plan['title']}\n\n"
+        plan_text += "#### Sections:\n"
+        for section in st.session_state.research_plan["sections"]:
+            plan_text += f"**{section['title']}**: {section['description']}\n\n"
+            plan_text += "Key questions:\n"
+            for q in section.get('key_questions', []):
+                plan_text += f"- {q}\n"
+            plan_text += "\n"
         
-        # Update progress
-        progress_container.progress(current_iteration / max_iterations)
-        status_container.markdown(f"**Research Iteration {current_iteration}/{max_iterations}**")
+        plan_container.markdown(plan_text)
         
-        # If it's the first iteration, use the original query
-        # Otherwise, use the query determined from the previous iteration's gaps
-        if current_iteration == 1:
-            current_query = query
-        else:
-            # Analyze previous iteration's findings for gaps
-            prev_iteration = st.session_state.research_iterations[-1]
-            gaps = identify_knowledge_gaps(prev_iteration['analysis'])
-            should_continue, next_query = determine_next_iteration(gaps, st.session_state.knowledge_graph)
+        # Buttons for plan feedback
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Proceed with this plan"):
+                st.session_state.research_phase = "researching"
+                plan_container.empty()
+                st.rerun()
+        with col2:
+            if st.button("Regenerate plan"):
+                st.session_state.research_plan = None
+                st.session_state.research_phase = "initial"
+                plan_container.empty()
+                st.rerun()
+    
+    # PHASE 2: SECTION-BY-SECTION RESEARCH  
+    if st.session_state.research_phase == "researching":
+        # Calculate overall progress
+        total_sections = len(st.session_state.sections)
+        current_section_idx = st.session_state.current_section
+        
+        if current_section_idx < total_sections:
+            # Update progress
+            progress_container.progress((current_section_idx) / total_sections)
+            current_section = st.session_state.sections[current_section_idx]
+            status_container.markdown(f"**Researching Section {current_section_idx + 1}/{total_sections}: {current_section['title']}**")
             
-            if not should_continue:
-                status_container.markdown("✅ Research complete! No significant gaps remaining.")
-                break
+            # Research the current section
+            with st.spinner(f"Researching section: {current_section['title']}"):
+                section_result = research_section(current_section, query)
                 
-            current_query = next_query
-        
-        # Perform the current iteration's research
-        with st.spinner(f"Iteration {current_iteration}: Refining query..."):
-            refined_query = refine_research_query(current_query)
-            web_search_queries = simplify_search_query(refined_query)
-        
-        current_results = []
-        current_analyses = []
-        
-        for i, web_search_query in enumerate(web_search_queries, 1):
-            with st.spinner(f"Iteration {current_iteration}: Processing search query {i} of 5..."):
-                # Search using current query
-                search_results = brave_search(web_search_query)
-                current_results.extend(search_results)
+                # Store the section content
+                st.session_state.section_data[current_section['id']] = section_result["content"]
+                st.session_state.section_sources[current_section['id']] = section_result["sources"]
                 
-                if search_results:
-                    # Analyze current results
-                    analysis = analyze_with_gemini(f"{refined_query} (Search Query {i}: {web_search_query})", search_results)
-                    current_analyses.append((web_search_query, analysis))
+                # Move to the next section
+                st.session_state.current_section += 1
+                
+                if st.session_state.current_section >= total_sections:
+                    st.session_state.research_phase = "synthesizing"
+                
+                # Rerun to show progress on next section
+                st.rerun()
         
-        # Combine analyses for this iteration
-        combined_analysis = ""
-        for idx, (search_query, analysis) in enumerate(current_analyses, 1):
-            title = to_headline_case(search_query)
-            combined_analysis += f"## {title}\n{analysis}\n\n"
+    # PHASE 3: SYNTHESIS
+    if st.session_state.research_phase == "synthesizing":
+        status_container.markdown("**Synthesizing final report...**")
+        progress_container.progress(1.0)  # Show complete
         
-        # Update knowledge graph with new findings
-        st.session_state.knowledge_graph = update_knowledge_graph(combined_analysis, st.session_state.knowledge_graph)
-        
-        # Store iteration results
-        st.session_state.research_iterations.append({
-            'query': current_query,
-            'refined_query': refined_query,
-            'search_results': current_results,
-            'analysis': combined_analysis,
-            'knowledge_graph_state': st.session_state.knowledge_graph.copy()
-        })
-        
-        # Update iteration counter
-        st.session_state.current_iteration += 1
-    
-    # Generate final synthesis across all iterations
-    final_synthesis = synthesize_iterations(st.session_state.research_iterations)
-    
-    # Generate final report
-    final_report = write_final_report(
-        refined_query=st.session_state.research_iterations[0]['refined_query'],  # Use initial refined query
-        analyses=[(iter['query'], iter['analysis']) for iter in st.session_state.research_iterations],
-        search_results=sum([iter['search_results'] for iter in st.session_state.research_iterations], []),
-        initial_report=final_synthesis
-    )
-    
-    # Clean up the report
-    final_report = final_report.replace("```markdown", "").replace("```", "").strip()
-    
-    # Store final report in session state
-    st.session_state.final_report = final_report
-    
-    # Generate timestamp for the file name
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    st.session_state.export_filename = f"research_report_{timestamp}.md"
-    
-    # Clear progress tracking
-    progress_container.empty()
-    status_container.empty()
-    
-    # Reset iteration counter for next research session
-    st.session_state.current_iteration = 0
+        with st.spinner("Generating final report..."):
+            final_report = synthesize_sections(
+                st.session_state.sections,
+                st.session_state.section_data,
+                query,
+                st.session_state.research_plan.get("introduction", ""),
+                st.session_state.research_plan.get("conclusion", "")
+            )
+            
+            # Store final report in session state
+            st.session_state.final_report = final_report
+            
+            # Generate timestamp for the file name
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            st.session_state.export_filename = f"research_report_{timestamp}.md"
+            
+            # Mark research as complete
+            st.session_state.research_phase = "complete"
+            
+            # Clear containers
+            progress_container.empty()
+            status_container.empty()
+            
+            # Rerun to display the report
+            st.rerun()
 
 # Display results if available
-if hasattr(st.session_state, 'final_report'):
+if hasattr(st.session_state, 'final_report') and st.session_state.research_phase == "complete":
     # Display download button in a small container at the top
     st.container().download_button(
         label="📥 Export Final Report",

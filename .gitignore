@@ -2,4 +2,7 @@
 .streamlit/secrets.toml
 __pycache__/
 *.pyc
-.DS_Store 
+.DS_Store
+reference_repo/ 
+CURSOR_CONTEXT.md
+DEVELOPMENT_LOG.md
