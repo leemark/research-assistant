@@ -177,6 +177,40 @@ st.markdown("""
         color: #2c3e50;
     }
     
+    /* Custom button styles */
+    .custom-button {
+        display: inline-block;
+        padding: 8px 16px;
+        font-weight: 600;
+        text-align: center;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin: 5px 0;
+        text-decoration: none;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+    .primary-button {
+        background-color: #3d5afb;
+        color: white !important;
+        border: none;
+    }
+    .primary-button:hover {
+        background-color: #2a41d8;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
+    .secondary-button {
+        background-color: #f0f2f6;
+        color: #5a6a85 !important;
+        border: 1px solid #d8dde6;
+    }
+    .secondary-button:hover {
+        background-color: #e0e5ed;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+    
     /* Custom tab icon styles */
     .tab-icon {
         margin-right: 6px;
@@ -1058,6 +1092,7 @@ def analyze_section(section: Dict, main_query: str, search_results: List[Dict], 
     - Maintain an objective, scholarly tone
     - Structure your response with clear subheadings appropriate for this section
     - Do NOT include general introductions or conclusions about the overall topic
+    - IMPORTANT: Do NOT include the section title "{section['title']}" as a heading in your response - the title will be added automatically
     
     Below are the sources and their content summaries for this section:
     {'-' * 50}
@@ -1086,6 +1121,7 @@ def analyze_section(section: Dict, main_query: str, search_results: List[Dict], 
     Use proper markdown formatting with subheadings and lists as appropriate.
     Include inline citations [Source X] when referencing specific information.
     Do not include an introduction or conclusion to the overall report - just focus on this section.
+    IMPORTANT: Do NOT include the section title "{section['title']}" as a heading in your response. The heading will be added automatically.
     """
     
     # Generate the section content
@@ -1398,8 +1434,13 @@ if submitted and query or st.session_state.research_phase != "initial":
         "Final Report": "📄"
     }
     
-    # Create tabs with icon prefixes (using plain text instead of HTML)
-    tabs = st.tabs([f"{icon} {name}" for name, icon in tab_icons.items()])
+    # Use the current tab from session state (default to "plan" if not set)
+    active_tab_key = st.session_state.get("report_tab", "plan")
+    tab_index_map = {"plan": 0, "progress": 1, "graph": 2, "report": 3}
+    active_tab_index = tab_index_map.get(active_tab_key, 0)
+    
+    # Create tabs with the active tab pre-selected
+    tabs = st.tabs([f"{icon} {name}" for name, icon in tab_icons.items()], index=active_tab_index)
     plan_tab, progress_tab, graph_tab, report_tab = tabs
     
     # PHASE 1: PLANNING
@@ -1431,22 +1472,138 @@ if submitted and query or st.session_state.research_phase != "initial":
                 for q in section.get('key_questions', []):
                     st.markdown(f"<div class='key-question'>{q}</div>", unsafe_allow_html=True)
             
+            # Add custom styling for the buttons
+            st.markdown("""
+            <style>
+            div[data-testid="stHorizontalBlock"] {
+                background-color: #f8f9fa;
+                border-radius: 10px;
+                padding: 15px;
+                margin-top: 20px;
+                border-left: 5px solid #ff7f0e;
+            }
+            div.stButton > button {
+                width: 100%;
+                border-radius: 6px;
+                font-weight: 600;
+                padding: 0.5rem 1rem;
+                transition: all 0.3s ease;
+                box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            }
+            /* Style for the first column's button (Proceed) */
+            div[data-testid="column"]:first-child div.stButton > button {
+                background-color: #3d5afb;
+                color: white;
+                border: none;
+            }
+            div[data-testid="column"]:first-child div.stButton > button:hover {
+                background-color: #2a41d8;
+                transform: translateY(-2px);
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+            }
+            /* Style for the second column's button (Regenerate) */
+            div[data-testid="column"]:nth-child(2) div.stButton > button {
+                background-color: #f0f2f6;
+                color: #5a6a85;
+                border: 1px solid #d8dde6;
+            }
+            div[data-testid="column"]:nth-child(2) div.stButton > button:hover {
+                background-color: #e0e5ed;
+                transform: translateY(-2px);
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            }
+            </style>
+            """, unsafe_allow_html=True)
+            
             # Buttons for plan feedback
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("Proceed with this plan"):
+                if st.button("Proceed with this plan", use_container_width=True):
+                    # Save the current plan and prepare for research
                     st.session_state.research_phase = "researching"
                     st.session_state.report_tab = "progress"
-                    st.success("Starting research with approved plan!")
-                    time.sleep(1)  # Short delay to show the success message
+                    
+                    # Display a more prominent success message
+                    st.markdown("""
+                    <style>
+                    .research-start-success {
+                        background-color: #d4edda;
+                        color: #155724;
+                        padding: 15px;
+                        border-radius: 8px;
+                        border-left: 5px solid #28a745;
+                        margin: 20px 0;
+                        font-weight: 500;
+                        animation: fadeIn 0.5s ease-in-out;
+                    }
+                    @keyframes fadeIn {
+                        0% { opacity: 0; transform: translateY(10px); }
+                        100% { opacity: 1; transform: translateY(0); }
+                    }
+                    </style>
+                    <div class="research-start-success">
+                        <span style="font-size: 1.1em;">✅ Starting research with approved plan!</span>
+                        <div style="font-size: 0.9em; margin-top: 5px;">Switching to Research Progress tab...</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Short delay to show the success message and allow animation to play
+                    time.sleep(1.5)
                     st.rerun()
             with col2:
-                if st.button("Regenerate plan"):
+                if st.button("Regenerate plan", use_container_width=True):
                     st.session_state.research_plan = None
                     st.session_state.research_phase = "initial"
                     st.info("Regenerating research plan...")
                     time.sleep(1)  # Short delay to show the info message
                     st.rerun()
+        
+        # Display the research plan in view-only mode for other research phases
+        elif st.session_state.research_phase in ["researching", "synthesizing", "complete"] and st.session_state.research_plan:
+            # Show a status indicator
+            phase_status = {
+                "researching": "🔍 Research in progress...",
+                "synthesizing": "🔄 Synthesizing results...",
+                "complete": "✅ Research complete!"
+            }
+            st.markdown(f"""
+            <div style="background-color: #f2f7ff; border-radius: 5px; padding: 10px; margin-bottom: 20px; border-left: 4px solid #3d5afb;">
+                <strong>{phase_status.get(st.session_state.research_phase, "")}</strong>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Display the research plan in view-only mode
+            st.markdown("## Research Plan")
+            st.markdown(f"""<div class='plan-card'>
+                <h3>{st.session_state.research_plan['title']}</h3>
+                <p>{st.session_state.research_plan.get('introduction', '')}</p>
+            </div>""", unsafe_allow_html=True)
+            
+            st.markdown("### Research Sections")
+            for section in st.session_state.research_plan["sections"]:
+                # Add status indicator for each section
+                section_id = section['id']
+                if section_id in st.session_state.section_data:
+                    status_icon = "✅"
+                    status_color = "#28a745"
+                elif section_id == st.session_state.current_section:
+                    status_icon = "🔍"
+                    status_color = "#17a2b8"
+                else:
+                    status_icon = "⏳"
+                    status_color = "#6c757d"
+                
+                st.markdown(f"""<div class='section-card'>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div class='section-header'>{section['title']}</div>
+                        <div style="color: {status_color}; font-weight: bold;">{status_icon}</div>
+                    </div>
+                    <p>{section['description']}</p>
+                    <div style='margin-top: 10px;'>Key questions:</div>
+                </div>""", unsafe_allow_html=True)
+                
+                for q in section.get('key_questions', []):
+                    st.markdown(f"<div class='key-question'>{q}</div>", unsafe_allow_html=True)
     
     # PHASE 2: SECTION-BY-SECTION RESEARCH
     with progress_tab:
@@ -1580,7 +1737,7 @@ if submitted and query or st.session_state.research_phase != "initial":
             # Display the knowledge graph
             graph_data = render_knowledge_graph()
             if graph_data:
-                st.image(f"data:image/png;base64,{graph_data}", use_column_width=True)
+                st.image(f"data:image/png;base64,{graph_data}", use_container_width=True)
                 
                 # Display detailed concept information
                 if 'concepts' in st.session_state.knowledge_graph:
