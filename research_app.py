@@ -1398,8 +1398,8 @@ if submitted and query or st.session_state.research_phase != "initial":
         "Final Report": "📄"
     }
     
-    # Create tabs with icon prefixes
-    tabs = st.tabs([f"<span class='tab-icon'>{icon}</span> {name}" for name, icon in tab_icons.items()], format_func=lambda x: x)
+    # Create tabs with icon prefixes (using plain text instead of HTML)
+    tabs = st.tabs([f"{icon} {name}" for name, icon in tab_icons.items()])
     plan_tab, progress_tab, graph_tab, report_tab = tabs
     
     # PHASE 1: PLANNING
