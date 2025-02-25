@@ -1494,6 +1494,7 @@ if submitted and query or st.session_state.research_phase != "initial":
                 background-color: #3d5afb;
                 color: white;
                 border: none;
+                font-weight: 600;
             }
             div[data-testid="column"]:first-child div.stButton > button:hover {
                 background-color: #2a41d8;
@@ -1503,8 +1504,9 @@ if submitted and query or st.session_state.research_phase != "initial":
             /* Style for the second column's button (Regenerate) */
             div[data-testid="column"]:nth-child(2) div.stButton > button {
                 background-color: #f0f2f6;
-                color: #5a6a85;
+                color: #2c3e50;
                 border: 1px solid #d8dde6;
+                font-weight: 600;
             }
             div[data-testid="column"]:nth-child(2) div.stButton > button:hover {
                 background-color: #e0e5ed;
