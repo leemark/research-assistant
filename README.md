@@ -1,32 +1,44 @@
 # DEEP fREeSEARCH
-An advanced AI-powered research assistant that performs comprehensive, multi-step analysis using Brave Search API and Google's Gemini 2.0 Flash Thinking model.
+An advanced AI-powered research assistant that performs comprehensive, section-based research with interactive visualization using Brave Search API and Google's Gemini 2.0 Flash Thinking model.
 
 🔗 **Try it now:** [https://deepresearch.streamlit.app/](https://deepresearch.streamlit.app/)
 📦 **GitHub Repository:** [https://github.com/leemark/research-assistant](https://github.com/leemark/research-assistant)
 
 ## Features
-- 🤖 Multi-step reasoning with automated knowledge gap identification
-- 📊 Dynamic knowledge graph construction and refinement
-- 🔍 Intelligent web search powered by Brave Search API
-- 🧠 Advanced analysis using Gemini 2.0 Flash Thinking model
-- 🔄 Iterative research refinement (up to 5 iterations)
-- 📝 Comprehensive research report generation
-- 📥 Export functionality for markdown reports
-- 🎯 Automatic query refinement and expansion
-- 📈 Progress tracking and research status updates
-- 🎨 Clean, user-friendly interface
+- 📋 **Smart Research Planning** - Automatically breaks topics into logical sections with targeted research questions
+- 🔍 **Section-by-Section Research** - Conducts focused research on each section with proper source citation
+- 🤖 **Advanced Analysis** - Powered by Gemini 2.0 Flash Thinking for in-depth content analysis
+- 📊 **Knowledge Graph Visualization** - Interactive visualization of concept relationships and connections
+- 🔄 **Research Timeline** - Visualizes the research progress with key milestones
+- 🧩 **Interactive Section Review** - Expandable/collapsible sections with source viewing
+- 📝 **Comprehensive Report Generation** - Well-structured reports with proper citations and organization
+- 📥 **Export Functionality** - Download complete research reports in markdown format
+- 🎯 **Human-in-the-Loop Feedback** - Review and approve research plans before execution
+- 🎨 **Modern, Intuitive Interface** - Clean, tabbed design with visual progress indicators
 
 ## How It Works
-1. The system starts with your research query
-2. For each iteration:
-   - Refines and expands the query
-   - Performs targeted web searches
-   - Analyzes findings using Gemini 2.0 Flash Thinking
-   - Builds and updates knowledge graph
-   - Identifies knowledge gaps
-   - Determines if another iteration would be valuable
-3. Synthesizes findings across all iterations
-4. Generates a comprehensive research report
+1. **Planning Phase**
+   - Generate a comprehensive research plan with sections
+   - Review and approve the plan or request regeneration
+   - Each section includes key questions to guide research
+
+2. **Research Phase**
+   - Conduct targeted research for each section independently
+   - Generate section-specific search queries
+   - Analyze content in the context of each section
+   - Track sources and citations on a per-section basis
+
+3. **Synthesis Phase**
+   - Combine all section content into a cohesive report
+   - Generate proper introduction and conclusion
+   - Create table of contents with anchors
+   - Consolidate sources with de-duplication
+
+4. **Interactive Review**
+   - Review completed sections while research is in progress
+   - Explore the knowledge graph of concept relationships
+   - View research timeline and progress indicators
+   - Export the final report when complete
 
 ## Setup
 1. Clone this repository
@@ -55,26 +67,29 @@ pip install -r requirements.txt
 streamlit run research_app.py
 ```
 
-2. Enter your research query
-3. Set maximum iterations (1-5)
-4. Review the progress as the system:
-   - Refines your query
-   - Performs multi-step research
-   - Builds knowledge graph
-   - Identifies and fills knowledge gaps
-5. Get your comprehensive research report
-6. Export the report in markdown format
+2. Enter your research query and set research depth
+3. Review the generated research plan:
+   - See how the topic is broken down into sections
+   - Review key questions for each section
+   - Approve the plan or request regeneration
+
+4. Monitor the research progress:
+   - Watch as each section is researched in sequence
+   - Review completed sections while others are being researched
+   - Explore sources for each section
+   - View the knowledge graph as it develops
+
+5. Get your comprehensive research report:
+   - Review the final synthesized report
+   - Export in markdown format for use in other applications
 
 ## Report Structure
 - Title and Timestamp
-- Abstract
-- Research Questions
-- Executive Summary
-- Key Findings and Analysis
-- Implications and Applications
-- Challenges and Limitations
-- Future Directions
-- Sources Analyzed
+- Table of Contents (with navigation anchors)
+- Introduction
+- Multiple Research Sections (as defined in the research plan)
+- Conclusion
+- Sources with Links
 
 ## Deployment
 The app is deployed on Streamlit Cloud. You can:
@@ -86,13 +101,24 @@ The app is deployed on Streamlit Cloud. You can:
      - `BRAVE_API_KEY`
      - `GOOGLE_API_KEY`
 
+## New in This Version
+- **Research Planning Phase** - Smart topic breakdown into logical sections
+- **Tabbed Interface** - Organize research workflow into logical tabs
+- **Section-by-Section Research** - More focused, thorough analysis
+- **Interactive Section Review** - Examine completed sections while others are being researched
+- **Knowledge Graph Visualization** - See concept relationships and connections
+- **Research Timeline** - Track research progress with timeline visualization
+- **Improved UI/UX** - Better styling, progress indicators, and visual feedback
+- **Enhanced Report Structure** - Better organization with proper sections and navigation
+
 ## Contributing
 Contributions are welcome! Areas for improvement include:
-- Enhanced knowledge graph visualization
-- Additional search sources
-- Improved query refinement strategies
-- Better source validation
-- Custom iteration strategies
+- Additional search API integrations (Tavily, Perplexity, etc.)
+- Support for other LLM providers (OpenAI, Anthropic, etc.)
+- Enhanced knowledge graph interactions
+- Custom report templates
+- PDF export functionality
+- Additional citation styles
 
 Please feel free to submit issues and pull requests.
 

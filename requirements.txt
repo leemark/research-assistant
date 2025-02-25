@@ -1,5 +1,8 @@
-streamlit
-requests
+streamlit>=1.42.0
+requests>=2.31.0
 google-generativeai>=0.3.0
 python-dotenv
-beautifulsoup4 
+beautifulsoup4>=4.12.0
+matplotlib>=3.8.0
+networkx>=3.1
+streamlit-timeline>=0.0.2 

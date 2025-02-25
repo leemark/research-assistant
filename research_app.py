@@ -10,6 +10,13 @@ import time
 from urllib.parse import urlparse
 import json
 import pathlib
+import networkx as nx
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')  # Use the 'Agg' backend which is non-interactive
+import io
+import base64
+from streamlit_timeline import timeline
 
 # Configure page settings
 st.set_page_config(
@@ -17,6 +24,101 @@ st.set_page_config(
     page_icon="🔍",
     layout="wide"
 )
+
+# Custom CSS for better UI
+st.markdown("""
+<style>
+    .main .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }
+    .research-card {
+        background-color: #f8f9fa;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+        border-left: 5px solid #4169E1;
+    }
+    .section-card {
+        background-color: #f0f2f6;
+        border-radius: 8px;
+        padding: 15px;
+        margin: 10px 0;
+        border-left: 4px solid #5cb85c;
+    }
+    .plan-card {
+        background-color: #f8f9fa;
+        border-radius: 10px;
+        padding: 15px;
+        margin: 15px 0;
+        border-left: 5px solid #ff7f0e;
+    }
+    .info-box {
+        background-color: #e6f3ff;
+        border-radius: 5px;
+        padding: 10px;
+        margin: 10px 0;
+        border: 1px solid #b8daff;
+    }
+    .sources-box {
+        background-color: #f5f5f5;
+        border-radius: 5px;
+        padding: 10px;
+        margin: 10px 0;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+    .key-question {
+        background-color: #f2f7ff;
+        border-radius: 5px;
+        padding: 5px 10px;
+        margin: 5px 0;
+        display: inline-block;
+        font-size: 0.9em;
+    }
+    .phase-indicator {
+        font-size: 0.8em;
+        font-weight: bold;
+        color: #6c757d;
+        margin-bottom: 10px;
+    }
+    .progress-label {
+        font-size: 0.9em;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+    .success-message {
+        color: #28a745;
+        font-weight: bold;
+    }
+    .header-container {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .header-text {
+        margin: 0;
+    }
+    .header-button {
+        margin-left: 15px;
+    }
+    /* Tab styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 2px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        white-space: pre-wrap;
+        border-radius: 4px 4px 0 0;
+    }
+    .section-header {
+        font-size: 1.2em;
+        font-weight: bold;
+        margin-bottom: 10px;
+        color: #2c3e50;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # Initialize session state for API keys
 if 'api_keys_initialized' not in st.session_state:
@@ -160,6 +262,16 @@ if 'section_sources' not in st.session_state:
     st.session_state.section_sources = {}
 if 'research_phase' not in st.session_state:
     st.session_state.research_phase = "initial"
+if 'show_completed_section' not in st.session_state:
+    st.session_state.show_completed_section = None
+if 'show_section_sources' not in st.session_state:
+    st.session_state.show_section_sources = None
+if 'edit_section_id' not in st.session_state:
+    st.session_state.edit_section_id = None
+if 'report_tab' not in st.session_state:
+    st.session_state.report_tab = "plan"
+if 'section_status' not in st.session_state:
+    st.session_state.section_status = {}
 
 # Updated Gemini model configuration
 generation_config = {
@@ -885,7 +997,7 @@ def analyze_section(section: Dict, main_query: str, search_results: List[Dict], 
     
     # Generate the section content
     chat = model.start_chat(history=[])
-    with st.spinner(f"Analyzing sources for section: {section['title']}..."):
+    with st.spinner(f"Analyzing sources for section: {section['title']}"):
         response = chat.send_message(prompt)
         return response.text
 
@@ -1000,6 +1112,166 @@ def synthesize_sections(sections: List[Dict], section_data: Dict, main_query: st
         final_report += f"{i}. [{source['title']}]({source['url']})\n"
     
     return final_report
+
+def render_knowledge_graph():
+    """
+    Visualize the knowledge graph with matplotlib and return the image as base64.
+    """
+    if not st.session_state.knowledge_graph or 'concepts' not in st.session_state.knowledge_graph:
+        return None
+        
+    # Create a graph
+    G = nx.Graph()
+    
+    # Add nodes (concepts)
+    for concept, data in st.session_state.knowledge_graph.get('concepts', {}).items():
+        # Use confidence as node size
+        size = data.get('confidence', 0.5) * 1000
+        G.add_node(concept, size=size)
+    
+    # Add edges (relationships)
+    for rel in st.session_state.knowledge_graph.get('relationships', []):
+        source = rel.get('source')
+        target = rel.get('target')
+        weight = rel.get('confidence', 0.5)
+        if source in G.nodes and target in G.nodes:
+            G.add_edge(source, target, weight=weight)
+    
+    if not G.nodes:
+        return None
+    
+    # Create the visualization
+    plt.figure(figsize=(10, 8))
+    pos = nx.spring_layout(G)
+    
+    # Get node sizes
+    node_sizes = [G.nodes[node].get('size', 300) for node in G.nodes]
+    
+    # Draw nodes and edges
+    nx.draw_networkx_nodes(G, pos, node_size=node_sizes, node_color="#4169E1", alpha=0.8)
+    
+    # Edge weights as line thickness and alpha
+    edge_weights = [G[u][v].get('weight', 0.5) * 3 for u, v in G.edges]
+    nx.draw_networkx_edges(G, pos, width=edge_weights, alpha=0.7, edge_color="#5c5c5c")
+    
+    # Labels
+    nx.draw_networkx_labels(G, pos, font_size=10, font_weight="bold")
+    
+    plt.title("Knowledge Graph: Concept Relationships")
+    plt.axis("off")
+    
+    # Convert the plot to an image
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', bbox_inches='tight', dpi=120)
+    plt.close()
+    buf.seek(0)
+    
+    # Convert to base64 for display
+    data = base64.b64encode(buf.read()).decode("utf-8")
+    return data
+
+def create_research_timeline():
+    """
+    Create a timeline of research events for visualization.
+    """
+    events = []
+    
+    # Add timeline entry for research plan
+    if st.session_state.research_plan:
+        events.append({
+            "start_date": {
+                "year": datetime.now().year,
+                "month": datetime.now().month,
+                "day": datetime.now().day,
+                "hour": datetime.now().hour,
+                "minute": datetime.now().minute,
+            },
+            "text": {
+                "headline": "Research Plan Created",
+                "text": f"<p>Created research plan for topic: {st.session_state.research_plan.get('title', '')}</p>"
+            }
+        })
+    
+    # Add timeline entries for each completed section
+    for section_id, content in st.session_state.section_data.items():
+        # Find the section with this ID
+        section = next((s for s in st.session_state.sections if s['id'] == section_id), None)
+        if section:
+            # Create a timestamp slightly later than the previous event
+            events.append({
+                "start_date": {
+                    "year": datetime.now().year,
+                    "month": datetime.now().month,
+                    "day": datetime.now().day,
+                    "hour": datetime.now().hour,
+                    "minute": datetime.now().minute + len(events),
+                    "second": datetime.now().second,
+                },
+                "text": {
+                    "headline": f"Researched: {section['title']}",
+                    "text": f"<p>Completed research for section: {section['title']}</p><p>{section['description']}</p>"
+                }
+            })
+    
+    # Add final timeline entry if report is complete
+    if st.session_state.research_phase == "complete" and hasattr(st.session_state, 'final_report'):
+        events.append({
+            "start_date": {
+                "year": datetime.now().year,
+                "month": datetime.now().month,
+                "day": datetime.now().day,
+                "hour": datetime.now().hour,
+                "minute": datetime.now().minute + len(events),
+            },
+            "text": {
+                "headline": "Final Report Generated",
+                "text": "<p>Completed synthesis of all sections into final research report</p>"
+            }
+        })
+    
+    # Format the timeline data
+    timeline_data = {
+        "title": {
+            "text": {
+                "headline": "Research Process Timeline",
+                "text": "<p>Key events in the research process</p>"
+            }
+        },
+        "events": events
+    }
+    
+    return timeline_data
+
+def toggle_section_display(section_id):
+    """
+    Toggle the display of a completed section
+    """
+    if st.session_state.show_completed_section == section_id:
+        st.session_state.show_completed_section = None
+    else:
+        st.session_state.show_completed_section = section_id
+
+def toggle_sources_display(section_id):
+    """
+    Toggle the display of sources for a section
+    """
+    if st.session_state.show_section_sources == section_id:
+        st.session_state.show_section_sources = None
+    else:
+        st.session_state.show_section_sources = section_id
+
+def set_section_for_editing(section_id):
+    """
+    Set a section for editing
+    """
+    st.session_state.edit_section_id = section_id
+
+def update_section_content(section_id, new_content):
+    """
+    Update the content of a section
+    """
+    if section_id in st.session_state.section_data:
+        st.session_state.section_data[section_id] = new_content
 
 # Streamlit UI
 st.title("DEEP fREeSEARCH")
